@@ -1,17 +1,33 @@
-# pose_camera_app
+# Pose Camera App (AI 구도 코칭 카메라)
 
-A new Flutter project.
+이 프로젝트는 Ultralytics YOLOv8 인공지능 모델을 활용하여, 사용자가 사진을 촬영할 때 완벽한 구도를 잡을 수 있도록 실시간으로 코칭해 주는 지능형 카메라 애플리케이션입니다.
 
-## Getting Started
+## 🌟 주요 기능 (Features)
 
-This project is a starting point for a Flutter application.
+* **실시간 AI 컴포지션 코칭**: 온디바이스 AI(YOLOv8 Pose)가 사용자의 관절(코 등 주요 포인트)을 초고속으로 추적합니다.
+* **완벽한 구도 안내 (Composition Guidelines)**:
+  * 📸 **삼분할 법칙 (Rule of Thirds)**: 화면을 9등분하는 격자의 교차점 중 피사체와 가장 가까운 곳으로 배치를 유도합니다.
+  * 🌀 **황금비율 (Golden Ratio)**: 피보나치 나선을 그려 완벽한 구도의 핵심 타겟으로 렌즈를 부드럽게 이끌어줍니다.
+* **스마트 클린 캡처 (Zero-Lag Clean Capture)**:
+  * 화면에 코칭 가이드(격자, 퍼펙트 안내문구 등)가 떠 있는 라이브 상태에서, 촬영 버튼을 누르는 순간 즉시(0.1초) 코칭 UI만을 뷰에서 숨깁니다.
+  * 네이티브 카메라 스트리밍 방식의 제약을 극복하고 30FPS의 부드러운 프레임을 유지하면서, **뷰파인더의 순수 원본 화면만 깔끔하게 캡처**하여 갤러리에 즉시 저장합니다.
+* **친숙한 UI/UX**:
+  * 아이폰 기본 카메라 앱의 레이아웃(플래시, 모드 셀렉터, 하단 셔터 및 카메라 렌즈 전환 UI)을 구성하여 이질감 없는 경험을 제공합니다.
 
-A few resources to get you started if this is your first Flutter project:
+## 🛠️ 기술 스택 (Architecture)
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+* **프레임워크**: Flutter (Cross-platform)
+* **AI 백엔드 (Vision)**: `ultralytics_yolo` 패키지 + `yolov8n-pose_float16.tflite` (Edge AI)
+* **캡처 시스템**:
+  * 카메라 렌더링: `YOLOView` (Native Camera View)
+  * 이미지 캡처/저장: `gal` 패키지 연동 + `RepaintBoundary` 우회 캡처 파이프라인
+* **UI & 그래픽**: 
+  * `MathStabilizer`: AI가 추적하는 좌표의 떨림(Jittering) 현상을 막고 자연스럽게 타겟에 자력으로 붙도록(Sticky) 고안한 커스텀 보정 알고리즘
+  * `CustomPainter`: 코칭 격자, 피보나치 나선 구조, 타겟 트래킹 라인을 실시간으로 렌더링
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 🚀 직접 실행해보기 (Getting Started)
+
+1. 이 프로젝트를 로컬로 클론하고 환경을 구성합니다.
+2. `flutter pub get` 명령어로 패키지를 설치합니다.
+3. 카메라와 하드웨어 연산이 필요하므로 가상 에뮬레이터 대신 **실제 안드로이드 기기 또는 iOS 실기기 디바이스**에서 디버깅하는 것을 권장합니다.
+4. 앱 화면에서 제공되는 '황금 비율' 또는 '삼분할' 모드에 진입해 코칭을 체험해 보세요!

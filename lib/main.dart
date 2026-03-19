@@ -45,7 +45,10 @@ class MyApp extends StatelessWidget {
                   padding: const EdgeInsets.all(20.0),
                   child: Text(
                     "Camera Error: $cameraInitError",
-                    style: const TextStyle(color: Colors.redAccent, fontSize: 16),
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 16,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -67,11 +70,7 @@ class HomeScreen extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF1A1A2E),
-              Color(0xFF16213E),
-              Color(0xFF0F3460),
-            ],
+            colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
           ),
         ),
         child: SafeArea(
@@ -114,45 +113,49 @@ class HomeScreen extends StatelessWidget {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildMenuCard(
-                        context,
-                        title: '황금비율 (Golden Ratio)',
-                        subtitle: '1:1.618 비율의 완벽한 조화',
-                        icon: Icons.auto_awesome,
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFFFD700), Color(0xFFFF8C00)],
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildMenuCard(
+                          context,
+                          title: '황금비율 (Golden Ratio)',
+                          subtitle: '1:1.618 비율의 완벽한 조화',
+                          icon: Icons.auto_awesome,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFFD700), Color(0xFFFF8C00)],
+                          ),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const golden.GoldenRatioScreen(),
+                              ),
+                            );
+                          },
                         ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const golden.GoldenRatioScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 20),
-                      _buildMenuCard(
-                        context,
-                        title: '3분할법 (Rule of Thirds)',
-                        subtitle: '클래식한 사진 구도의 기본',
-                        icon: Icons.grid_on,
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF00D4FF), Color(0xFF0099FF)],
+                        const SizedBox(height: 20),
+                        _buildMenuCard(
+                          context,
+                          title: '3분할법 (Rule of Thirds)',
+                          subtitle: '클래식한 사진 구도의 기본',
+                          icon: Icons.grid_on,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF00D4FF), Color(0xFF0099FF)],
+                          ),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const third.RuleOfThirdsScreen(),
+                              ),
+                            );
+                          },
                         ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const third.RuleOfThirdsScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -216,11 +219,7 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: Icon(
-                  icon,
-                  size: 40,
-                  color: Colors.white,
-                ),
+                child: Icon(icon, size: 40, color: Colors.white),
               ),
               const SizedBox(width: 20),
               // 텍스트

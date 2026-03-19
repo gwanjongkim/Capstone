@@ -38,6 +38,7 @@ dependencies:
   image: ^4.2.0
   ultralytics_yolo: ^0.1.25
   image_picker: ^0.8.7
+  gal: ^2.3.2
 
 dev_dependencies:
   flutter_test:
