@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widget/app_top_bar.dart';
@@ -22,12 +23,12 @@ class BestCutScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           AppTopBar(
-            title: '베스트 컷 추천',
+            title: 'Best Cut Picks',
             onBack: onBack,
           ),
           const SizedBox(height: 20),
           const Text(
-            '이미지 분석 진행 중..',
+            'Image analysis in progress.',
             style: AppTextStyles.title16,
           ),
           const SizedBox(height: 8),
@@ -35,7 +36,7 @@ class BestCutScreen extends StatelessWidget {
             children: const [
               Expanded(
                 child: Text(
-                  'Evaluating facial expressions & lighting...',
+                  'Evaluating facial expressions and lighting...',
                   style: AppTextStyles.body13,
                 ),
               ),
@@ -63,7 +64,7 @@ class BestCutScreen extends StatelessWidget {
           ),
           const SizedBox(height: 26),
           const Text(
-            'Top3 Pozy 추천 픽!',
+            'Top 3 Pozy Picks',
             style: AppTextStyles.title20,
           ),
           const SizedBox(height: 14),
@@ -78,7 +79,7 @@ class BestCutScreen extends StatelessWidget {
             },
             child: _heroCard(
               'https://images.unsplash.com/photo-1517849845537-4d257902454a?w=900',
-              '#1 베스트 컷',
+              '#1 Best Cut',
               true,
             ),
           ),
@@ -116,7 +117,7 @@ class BestCutScreen extends StatelessWidget {
               onPressed: () {},
               icon: const Icon(Icons.refresh),
               label: const Text(
-                '초기화하기',
+                'Start Over',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -139,7 +140,7 @@ class BestCutScreen extends StatelessWidget {
               onPressed: () => onMoveTab(4),
               icon: const Icon(Icons.edit_outlined),
               label: const Text(
-                '편집하기',
+                'Edit Photo',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,

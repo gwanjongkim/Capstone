@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_shadows.dart';
 import '../theme/app_text_styles.dart';
 import '../widget/app_top_bar.dart';
 
@@ -22,6 +23,7 @@ class GalleryScreen extends StatefulWidget {
 class _GalleryScreenState extends State<GalleryScreen> {
   bool _loading = true;
   bool _granted = false;
+  bool _showSettingsShortcut = false;
   String? _errorMessage;
 
   List<AssetPathEntity> _albums = [];
@@ -50,6 +52,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
         setState(() {
           _granted = false;
           _loading = false;
+          _showSettingsShortcut = permission == PermissionState.denied ||
+              permission == PermissionState.restricted;
           _albums = [];
           _selectedAlbum = null;
           _photos = [];
@@ -77,6 +81,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         setState(() {
           _granted = true;
           _loading = false;
+          _showSettingsShortcut = false;
           _albums = [];
           _selectedAlbum = null;
           _photos = [];
@@ -92,6 +97,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       setState(() {
         _granted = true;
         _loading = false;
+        _showSettingsShortcut = false;
         _albums = albums;
         _selectedAlbum = firstAlbum;
         _photos = photos;
@@ -104,6 +110,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       setState(() {
         _granted = true;
         _loading = false;
+        _showSettingsShortcut = false;
         _albums = [];
         _selectedAlbum = null;
         _photos = [];
@@ -177,6 +184,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
     return name;
   }
 
+  Future<void> _openSettings() async {
+    await PhotoManager.openSetting();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -222,7 +233,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
             child: _loading
                 ? const _LoadingView()
                 : !_granted
-                    ? _PermissionView(onRetry: _loadAlbumsAndPhotos)
+                    ? _PermissionView(
+                        onRetry: _loadAlbumsAndPhotos,
+                        onOpenSettings:
+                            _showSettingsShortcut ? _openSettings : null,
+                      )
                     : _errorMessage != null
                         ? _ErrorView(
                             message: _errorMessage!,
@@ -410,9 +425,11 @@ class _LoadingView extends StatelessWidget {
 
 class _PermissionView extends StatelessWidget {
   final VoidCallback onRetry;
+  final VoidCallback? onOpenSettings;
 
   const _PermissionView({
     required this.onRetry,
+    this.onOpenSettings,
   });
 
   @override
@@ -425,13 +442,7 @@ class _PermissionView extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            boxShadow: AppShadows.card,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -442,7 +453,7 @@ class _PermissionView extends StatelessWidget {
                 color: AppColors.primaryText,
               ),
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 '갤러리 접근 권한이 필요합니다.',
                 style: TextStyle(
                   fontSize: 17,
@@ -452,7 +463,7 @@ class _PermissionView extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 '허용하면 휴대폰에 있는 사진과 앨범을\n앱에서 불러올 수 있습니다.',
                 style: AppTextStyles.body13,
                 textAlign: TextAlign.center,
@@ -471,7 +482,7 @@ class _PermissionView extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  child: const Text(
+                  child: Text(
                     '권한 허용 다시 시도',
                     style: TextStyle(
                       fontSize: 15,
@@ -480,6 +491,30 @@ class _PermissionView extends StatelessWidget {
                   ),
                 ),
               ),
+              if (onOpenSettings != null) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton(
+                    onPressed: onOpenSettings,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primaryText,
+                      side: const BorderSide(color: Color(0xFFD6D6D6)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Text(
+                      'Open Settings',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -507,13 +542,7 @@ class _ErrorView extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            boxShadow: AppShadows.card,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -614,13 +643,7 @@ class _EmptyPhotoView extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            boxShadow: AppShadows.card,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,

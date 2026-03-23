@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_colors.dart';
+import '../theme/app_shadows.dart';
 import '../theme/app_text_styles.dart';
 
 class AnalyzeBestScreen extends StatelessWidget {
@@ -58,7 +60,7 @@ class AnalyzeBestScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: const Text(
-                          '#1 베스트 컷',
+                          '#1 Best Cut',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 11,
@@ -71,18 +73,18 @@ class AnalyzeBestScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text('│ Pozy 분석 리포트', style: AppTextStyles.title20),
+              const Text('Pozy Analysis Report', style: AppTextStyles.title20),
               const SizedBox(height: 14),
               const _ReportCard(
-                title: '구도 (Composition)',
+                title: 'Composition',
                 score: 95,
-                description: '삼분할 법칙에 맞춰 완벽하게 위치해 있습니다.',
+                description: 'The subject sits well inside the frame and the balance feels deliberate.',
               ),
               const SizedBox(height: 12),
               const _ReportCard(
-                title: '밝기 (Brightness)',
+                title: 'Brightness',
                 score: 88,
-                description: '자연스러운 채광이 피사체를 돋보이게 합니다.',
+                description: 'Exposure stays stable and the subject remains clear without harsh clipping.',
               ),
               const SizedBox(height: 12),
               const _PassCard(),
@@ -100,7 +102,7 @@ class AnalyzeBestScreen extends StatelessWidget {
                   onPressed: () {},
                   icon: const Icon(Icons.download_outlined),
                   label: const Text(
-                    '이어서 편집하기 (Edit Photo)',
+                    'Edit Photo',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -119,7 +121,7 @@ class AnalyzeBestScreen extends StatelessWidget {
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.refresh),
                   label: const Text(
-                    '다른 사진 분석하기 (Analyze Others)',
+                    'Analyze Others',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -150,6 +152,7 @@ class _ReportCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
+        boxShadow: AppShadows.card,
       ),
       child: Column(
         children: [
@@ -201,6 +204,7 @@ class _PassCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
+        boxShadow: AppShadows.card,
       ),
       child: Column(
         children: [
@@ -208,7 +212,7 @@ class _PassCard extends StatelessWidget {
             children: const [
               Icon(Icons.visibility_outlined, size: 18, color: AppColors.primaryText),
               SizedBox(width: 8),
-              Expanded(child: Text('눈감음 여부 (Eye Detection)', style: AppTextStyles.title16)),
+              Expanded(child: Text('Eye Detection', style: AppTextStyles.title16)),
               Text(
                 'PASS',
                 style: TextStyle(
@@ -233,7 +237,7 @@ class _PassCard extends StatelessWidget {
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              '모든 피사체가 눈을 뜨고 있습니다.',
+              'Both eyes are clearly visible and the gaze reads naturally.',
               style: AppTextStyles.body13,
             ),
           ),
