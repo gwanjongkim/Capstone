@@ -11,9 +11,6 @@ import 'package:gal/gal.dart';
 
 List<CameraDescription> cameras = [];
 
-// ---------------------------------------------------------
-// 1. MathStabilizer
-// ---------------------------------------------------------
 class MathStabilizer {
   final double alpha;
   final double stickyMarginRatio;
@@ -85,9 +82,6 @@ class MathStabilizer {
   }
 }
 
-// ---------------------------------------------------------
-// 2. GoldenCoach
-// ---------------------------------------------------------
 class GoldenCoach {
   static const double perfectThresholdRatio = 0.1;
   static const double phi = 1.6180339887;
@@ -168,15 +162,12 @@ class GoldenCoach {
   bool isPerfect(double distance) => distance < (width * perfectThresholdRatio);
 }
 
-// ---------------------------------------------------------
-// 3. GoldenCoachPainter
-// ---------------------------------------------------------
 class GoldenCoachPainter extends CustomPainter {
   final GoldenCoach coach;
   final math.Point<int>? currentSubjectPos;
   final math.Point<int>? targetPos;
   final bool isPerfect;
-  final Rect? personBoundingBox; // Kept for constructor compatibility but unused
+  final Rect? personBoundingBox;
 
   GoldenCoachPainter({
     required this.coach,
@@ -201,7 +192,6 @@ class GoldenCoachPainter extends CustomPainter {
       ..strokeWidth = 2.0;
 
     if (coach.intersections.isNotEmpty) {
-      // 1. 나선형 방향 고정 (사람에 따라 팽글팽글 돌지 않도록 3번 인덱스로 완전 고정)
       int activeTargetIdx = 3;
 
       void drawSpiralArc(Rect rect, double startAngle, double sweepAngle) {
@@ -347,7 +337,6 @@ class GoldenCoachPainter extends CustomPainter {
       );
     }
 
-    // 3. 타겟 유도선 그리기
     if (currentSubjectPos != null && targetPos != null) {
       Color stateColor = isPerfect ? Colors.greenAccent : Colors.amber;
       final connectionPaint = Paint()
@@ -386,9 +375,6 @@ class GoldenCoachPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-// ---------------------------------------------------------
-// 4. GoldenRatioScreen
-// ---------------------------------------------------------
 class GoldenRatioScreen extends StatefulWidget {
   const GoldenRatioScreen({super.key});
 
@@ -400,13 +386,11 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
   final MathStabilizer _stabilizer = MathStabilizer();
   final GoldenCoach _coach = GoldenCoach();
 
-  // Screen State
   math.Point<int>? _smoothPos;
   math.Point<int>? _targetPos;
   bool _isPerfect = false;
   Rect? _personBoundingBox;
 
-  // Capture State
   final GlobalKey _cameraKey = GlobalKey();
   bool _isCapturing = false;
   bool _showFlash = false;
@@ -414,9 +398,8 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
   final List<String> _modes = ['CINEMATIC', 'VIDEO', 'PHOTO', 'PORTRAIT', 'PANO'];
 
   void _handleDetections(List<YOLOResult> results) {
-    if (_isCapturing) return; // Ignore detections during capture
+    if (_isCapturing) return; 
     
-    debugPrint('YOLO Detections: ${results.length}');
     if (results.isEmpty) {
       _stabilizer.reset();
       setState(() {
@@ -431,9 +414,6 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
     YOLOResult bestPerson = results[0];
     double maxArea = 0;
     for (var r in results) {
-      debugPrint(
-        'Detected Box: ${r.className} [${r.confidence}] - Box: ${r.boundingBox}',
-      );
       double area = r.normalizedBox.width * r.normalizedBox.height;
       if (area > maxArea) {
         maxArea = area;
@@ -442,13 +422,11 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
     }
 
     if (bestPerson.keypoints == null || bestPerson.keypoints!.isEmpty) {
-      debugPrint('No Keypoints for best person!');
       return;
     }
 
     final Size screenSize = MediaQuery.of(context).size;
     final kps = bestPerson.keypoints!;
-    debugPrint('Keypoints length: ${kps.length}');
 
     double imageWidth =
         bestPerson.boundingBox.width / bestPerson.normalizedBox.width;
@@ -500,23 +478,19 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
   Future<void> _takePhoto() async {
     if (_isCapturing) return;
 
-    // 1. Hide guidelines
     setState(() {
       _isCapturing = true;
     });
 
-    // 2. Wait a tick for the UI to rebuild without guidelines
     await Future.delayed(const Duration(milliseconds: 100));
 
     try {
-      // 3. Request permissions for saving to gallery
       final hasAccess = await Gal.hasAccess();
       if (!hasAccess) {
         final request = await Gal.requestAccess();
-        if (!request) return; // Did not grant permission
+        if (!request) return;
       }
 
-      // 4. Capture the RepaintBoundary
       RenderRepaintBoundary boundary =
           _cameraKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
@@ -525,7 +499,6 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
 
       if (byteData != null) {
         Uint8List pngBytes = byteData.buffer.asUint8List();
-        // 5. Save to gallery
         await Gal.putImageBytes(pngBytes);
 
         if (mounted) {
@@ -535,14 +508,12 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
         }
       }
     } catch (e) {
-      debugPrint("Capture error: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('사진 저장 중 오류가 발생했습니다: $e')),
         );
       }
     } finally {
-      // 6. Show flash effect and restore guidelines
       if (mounted) {
         setState(() {
           _isCapturing = false;
@@ -567,20 +538,18 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Camera Foreground/Background
           RepaintBoundary(
             key: _cameraKey,
             child: YOLOView(
-              modelPath: 'yolov8n-pose_float16.tflite',
+              modelPath: 'assets/models/yolov8n-pose_float16.tflite',
               task: YOLOTask.pose,
               useGpu: false,
               streamingConfig: const YOLOStreamingConfig.withPoses(),
-              showOverlays: false, // Permanently disable Native YOLO lines
+              showOverlays: false,
               onResult: _handleDetections,
             ),
           ),
           
-          // 2. AI Guideline Overlays
           if (!_isCapturing)
             CustomPaint(
               painter: GoldenCoachPainter(
@@ -622,7 +591,6 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
               ),
             ),
             
-          // 3. iPhone Style Top & Bottom Controls
           if (!_isCapturing)
             SafeArea(
               child: Column(
@@ -634,7 +602,6 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
               ),
             ),
 
-          // 4. White Flash Effect
           if (_showFlash)
             Container(color: Colors.white),
         ],
@@ -668,7 +635,6 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Mode Selector
           SizedBox(
             height: 30,
             child: ListView(
@@ -680,13 +646,11 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
           
           const SizedBox(height: 15),
 
-          // Main Bottom Buttons (Gallery, Shutter, Switch Camera)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 30.0, vertical: 10.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Gallery Thumbnail Placeholder
                 Container(
                   width: 50,
                   height: 50,
@@ -697,7 +661,6 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
                   ),
                 ),
 
-                // Shutter Button
                 GestureDetector(
                   onTap: _takePhoto,
                   child: Container(
@@ -720,7 +683,6 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
                   ),
                 ),
 
-                // Switch Camera Button
                 Container(
                   width: 50,
                   height: 50,
@@ -768,4 +730,3 @@ class _GoldenRatioScreenState extends State<GoldenRatioScreen> {
     );
   }
 }
-

@@ -11,7 +11,6 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     cameras = await availableCameras();
-    // 전역 카메라 리스트를 각 모듈에 전달
     golden.cameras = cameras;
     third.cameras = cameras;
   } catch (e) {
@@ -77,7 +76,6 @@ class HomeScreen extends StatelessWidget {
         child: SafeArea(
           child: Column(
             children: [
-              // 헤더
               Padding(
                 padding: const EdgeInsets.all(30.0),
                 child: Column(
@@ -102,15 +100,13 @@ class HomeScreen extends StatelessWidget {
                       '완벽한 구도를 위한 AI 가이드',
                       style: TextStyle(
                         fontSize: 16,
-                        color: Colors.white.withValues(alpha: 0.7),
+                        color: Colors.white.withOpacity(0.7),
                         letterSpacing: 0.5,
                       ),
                     ),
                   ],
                 ),
               ),
-
-              // 메뉴 카드들
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -179,15 +175,13 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
               ),
-
-              // 푸터
               Padding(
                 padding: const EdgeInsets.all(20.0),
                 child: Text(
                   'YOLO Pose Detection & NIMA Scoring',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: Colors.white.withOpacity(0.5),
                   ),
                 ),
               ),
@@ -218,14 +212,13 @@ class HomeScreen extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.white.withValues(alpha: 0.05),
-                Colors.white.withValues(alpha: 0.02),
+                Colors.white.withOpacity(0.05),
+                Colors.white.withOpacity(0.02),
               ],
             ),
           ),
           child: Row(
             children: [
-              // 아이콘
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -233,7 +226,7 @@ class HomeScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(15),
                   boxShadow: [
                     BoxShadow(
-                      color: gradient.colors.first.withValues(alpha: 0.3),
+                      color: gradient.colors.first.withOpacity(0.3),
                       blurRadius: 15,
                       spreadRadius: 2,
                     ),
@@ -242,7 +235,6 @@ class HomeScreen extends StatelessWidget {
                 child: Icon(icon, size: 40, color: Colors.white),
               ),
               const SizedBox(width: 20),
-              // 텍스트
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,16 +252,15 @@ class HomeScreen extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.white.withValues(alpha: 0.7),
+                        color: Colors.white.withOpacity(0.7),
                       ),
                     ),
                   ],
                 ),
               ),
-              // 화살표
               Icon(
                 Icons.arrow_forward_ios,
-                color: Colors.white.withValues(alpha: 0.5),
+                color: Colors.white.withOpacity(0.5),
                 size: 20,
               ),
             ],

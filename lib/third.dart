@@ -216,22 +216,6 @@ class RuleOfThirdsPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = isPerfect ? 3.0 : 2.0,
       );
-      if (isPerfect) {
-        final tp = TextPainter(
-          text: const TextSpan(
-            text: "PERFECT!",
-            style: TextStyle(
-              color: Colors.greenAccent,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              shadows: [Shadow(color: Colors.black, blurRadius: 4)],
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        );
-        tp.layout();
-        tp.paint(canvas, const Offset(20, 100));
-      }
     }
   }
 
@@ -253,7 +237,6 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
   bool _isPerfect = false;
   Rect? _personBoundingBox;
 
-  // Capture State
   final GlobalKey _cameraKey = GlobalKey();
   bool _isCapturing = false;
   bool _showFlash = false;
@@ -261,9 +244,8 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
   final List<String> _modes = ['CINEMATIC', 'VIDEO', 'PHOTO', 'PORTRAIT', 'PANO'];
 
   void _handleDetections(List<YOLOResult> results) {
-    if (_isCapturing) return; // Ignore detections during capture
+    if (_isCapturing) return; 
     
-    debugPrint('YOLO Third Detections: ${results.length}');
     if (results.isEmpty) {
       _stabilizer.reset();
       setState(() {
@@ -278,9 +260,6 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
     YOLOResult bestPerson = results[0];
     double maxArea = 0;
     for (var r in results) {
-      debugPrint(
-        'Detected Box: ${r.className} [${r.confidence}] - Box: ${r.boundingBox}',
-      );
       double area = r.normalizedBox.width * r.normalizedBox.height;
       if (area > maxArea) {
         maxArea = area;
@@ -289,13 +268,11 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
     }
 
     if (bestPerson.keypoints == null || bestPerson.keypoints!.isEmpty) {
-      debugPrint('No Keypoints for best person!');
       return;
     }
 
     final Size screenSize = MediaQuery.of(context).size;
     final kps = bestPerson.keypoints!;
-    debugPrint('Keypoints length: ${kps.length}');
 
     double imageWidth =
         bestPerson.boundingBox.width / bestPerson.normalizedBox.width;
@@ -346,23 +323,19 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
   Future<void> _takePhoto() async {
     if (_isCapturing) return;
 
-    // 1. Hide guidelines
     setState(() {
       _isCapturing = true;
     });
 
-    // 2. Wait a tick for the UI to rebuild without guidelines
     await Future.delayed(const Duration(milliseconds: 100));
 
     try {
-      // 3. Request permissions for saving to gallery
       final hasAccess = await Gal.hasAccess();
       if (!hasAccess) {
         final request = await Gal.requestAccess();
-        if (!request) return; // Did not grant permission
+        if (!request) return;
       }
 
-      // 4. Capture the RepaintBoundary
       RenderRepaintBoundary boundary =
           _cameraKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
@@ -371,7 +344,6 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
 
       if (byteData != null) {
         Uint8List pngBytes = byteData.buffer.asUint8List();
-        // 5. Save to gallery
         await Gal.putImageBytes(pngBytes);
 
         if (mounted) {
@@ -381,14 +353,12 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
         }
       }
     } catch (e) {
-      debugPrint("Capture error: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('사진 저장 중 오류가 발생했습니다: $e')),
         );
       }
     } finally {
-      // 6. Show flash effect and restore guidelines
       if (mounted) {
         setState(() {
           _isCapturing = false;
@@ -413,20 +383,18 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Camera Foreground/Background
           RepaintBoundary(
             key: _cameraKey,
             child: YOLOView(
-              modelPath: 'yolov8n-pose_float16.tflite',
+              modelPath: 'assets/models/yolov8n-pose_float16.tflite',
               task: YOLOTask.pose,
               useGpu: false,
               streamingConfig: const YOLOStreamingConfig.withPoses(),
-              showOverlays: false, // Permanently disable Native YOLO lines
+              showOverlays: false,
               onResult: _handleDetections,
             ),
           ),
           
-          // 2. AI Guideline Overlays
           if (!_isCapturing)
             CustomPaint(
               painter: RuleOfThirdsPainter(
@@ -468,7 +436,6 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
               ),
             ),
             
-          // 3. iPhone Style Top & Bottom Controls
           if (!_isCapturing)
             SafeArea(
               child: Column(
@@ -480,7 +447,6 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
               ),
             ),
 
-          // 4. White Flash Effect
           if (_showFlash)
             Container(color: Colors.white),
         ],
@@ -514,7 +480,6 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Mode Selector
           SizedBox(
             height: 30,
             child: ListView(
@@ -526,13 +491,11 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
           
           const SizedBox(height: 15),
 
-          // Main Bottom Buttons (Gallery, Shutter, Switch Camera)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 30.0, vertical: 10.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Gallery Thumbnail Placeholder
                 Container(
                   width: 50,
                   height: 50,
@@ -543,7 +506,6 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
                   ),
                 ),
 
-                // Shutter Button
                 GestureDetector(
                   onTap: _takePhoto,
                   child: Container(
@@ -566,7 +528,6 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
                   ),
                 ),
 
-                // Switch Camera Button
                 Container(
                   width: 50,
                   height: 50,
@@ -614,4 +575,3 @@ class _RuleOfThirdsScreenState extends State<RuleOfThirdsScreen> {
     );
   }
 }
-
