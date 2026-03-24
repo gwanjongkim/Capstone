@@ -114,7 +114,7 @@ packages:
     source: hosted
     version: "1.3.3"
   ffi:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
       name: ffi
       sha256: "6d7fd89431262d8f3125e81b50d3847a091d846eafcd4fdb88dd06f36d705a45"
@@ -166,6 +166,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.2"
+  flutter_litert:
+    dependency: "direct main"
+    description:
+      name: flutter_litert
+      sha256: e362d56cbc93d53dc66640b278c133bde6c26658404eb9dd49e405e0a6536cf2
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.7"
+  flutter_litert_flex:
+    dependency: "direct main"
+    description:
+      name: flutter_litert_flex
+      sha256: "26381a09bf652378af4168077c676d50234581e32d10fb4e5411ea405eee8140"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.5"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
@@ -445,15 +461,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.9"
-  tflite_flutter:
-    dependency: "direct main"
-    description:
-      path: "."
-      ref: HEAD
-      resolved-ref: "687ad63199da9196ab759ab17809221c944a5270"
-      url: "https://github.com/am15h/tflite_flutter_plugin.git"
-    source: git
-    version: "0.9.0"
   typed_data:
     dependency: transitive
     description:
