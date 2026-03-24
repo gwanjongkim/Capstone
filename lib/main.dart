@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'golden.dart' as golden;
 import 'third.dart' as third;
+import 'screens/a_cut_selector_screen.dart';
 
 List<CameraDescription> cameras = [];
 String? cameraInitError;
@@ -101,7 +102,7 @@ class HomeScreen extends StatelessWidget {
                       '완벽한 구도를 위한 AI 가이드',
                       style: TextStyle(
                         fontSize: 16,
-                        color: Colors.white.withOpacity(0.7),
+                        color: Colors.white.withValues(alpha: 0.7),
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -154,6 +155,25 @@ class HomeScreen extends StatelessWidget {
                             );
                           },
                         ),
+                        const SizedBox(height: 20),
+                        _buildMenuCard(
+                          context,
+                          title: 'AI A컷 셀렉터 (A-cut Picker)',
+                          subtitle: '여러 장의 사진 중 최고를 골라줍니다',
+                          icon: Icons.auto_fix_high,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
+                          ),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const ACutSelectorScreen(),
+                              ),
+                            );
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -164,10 +184,10 @@ class HomeScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.all(20.0),
                 child: Text(
-                  'YOLO Pose Detection',
+                  'YOLO Pose Detection & NIMA Scoring',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white.withOpacity(0.5),
+                    color: Colors.white.withValues(alpha: 0.5),
                   ),
                 ),
               ),
@@ -198,8 +218,8 @@ class HomeScreen extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.white.withOpacity(0.05),
-                Colors.white.withOpacity(0.02),
+                Colors.white.withValues(alpha: 0.05),
+                Colors.white.withValues(alpha: 0.02),
               ],
             ),
           ),
@@ -213,7 +233,7 @@ class HomeScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(15),
                   boxShadow: [
                     BoxShadow(
-                      color: gradient.colors.first.withOpacity(0.3),
+                      color: gradient.colors.first.withValues(alpha: 0.3),
                       blurRadius: 15,
                       spreadRadius: 2,
                     ),
@@ -240,7 +260,7 @@ class HomeScreen extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.white.withOpacity(0.7),
+                        color: Colors.white.withValues(alpha: 0.7),
                       ),
                     ),
                   ],
@@ -249,7 +269,7 @@ class HomeScreen extends StatelessWidget {
               // 화살표
               Icon(
                 Icons.arrow_forward_ios,
-                color: Colors.white.withOpacity(0.5),
+                color: Colors.white.withValues(alpha: 0.5),
                 size: 20,
               ),
             ],
