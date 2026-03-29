@@ -17,7 +17,7 @@ Uint8List _resizeForVlm(Uint8List jpegBytes) {
 /// Gemini REST API 기반 구도 분석 서비스.
 /// 피사체 종류와 무관하게 사진 전체의 품질을 코칭.
 class VlmCompositionService {
-  static const _apiKey = 'REMOVED_API_KEY';
+  static const _apiKey = 'example_api_key';
   static const _model = 'gemini-2.5-flash-lite';
   static const _url =
       'https://generativelanguage.googleapis.com/v1beta/models/$_model:generateContent?key=$_apiKey';
