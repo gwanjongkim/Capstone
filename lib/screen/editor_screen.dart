@@ -5,89 +5,19 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:gal/gal.dart';
-import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+
 
 import '../service/gemini_service.dart';
 import 'crop_screen.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../widget/app_top_bar.dart';
-
-const int _editorExportMaxDimension = 3072;
-const int _editorPreviewMaxDimension = 1600;
-
-enum _EditorAdjustment { brightness, contrast, saturation, warmth, fade, sharpness }
-
-extension on _EditorAdjustment {
-  String get label {
-    switch (this) {
-      case _EditorAdjustment.brightness:
-        return '밝기';
-      case _EditorAdjustment.contrast:
-        return '대비';
-      case _EditorAdjustment.saturation:
-        return '채도';
-      case _EditorAdjustment.warmth:
-        return '색온도';
-      case _EditorAdjustment.fade:
-        return '페이드';
-      case _EditorAdjustment.sharpness:
-        return '선명도';
-    }
-  }
-
-  String get shortLabel {
-    switch (this) {
-      case _EditorAdjustment.brightness:
-        return '밝기';
-      case _EditorAdjustment.contrast:
-        return '대비';
-      case _EditorAdjustment.saturation:
-        return '채도';
-      case _EditorAdjustment.warmth:
-        return '온도';
-      case _EditorAdjustment.fade:
-        return '페이드';
-      case _EditorAdjustment.sharpness:
-        return '선명도';
-    }
-  }
-
-  String get description {
-    switch (this) {
-      case _EditorAdjustment.brightness:
-        return '사진 전체의 밝기를 조절합니다';
-      case _EditorAdjustment.contrast:
-        return '밝고 어두운 영역의 차이를 키웁니다';
-      case _EditorAdjustment.saturation:
-        return '색상의 선명함과 진하기를 조절합니다';
-      case _EditorAdjustment.warmth:
-        return '차갑거나 따뜻한 색감으로 바꿉니다';
-      case _EditorAdjustment.fade:
-        return '대비를 누그러뜨려 부드러운 분위기를 만듭니다';
-      case _EditorAdjustment.sharpness:
-        return '이미지의 디테일과 경계를 강조합니다';
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case _EditorAdjustment.brightness:
-        return Icons.wb_sunny_outlined;
-      case _EditorAdjustment.contrast:
-        return Icons.contrast;
-      case _EditorAdjustment.saturation:
-        return Icons.palette_outlined;
-      case _EditorAdjustment.warmth:
-        return Icons.thermostat_auto_outlined;
-      case _EditorAdjustment.fade:
-        return Icons.blur_on_outlined;
-      case _EditorAdjustment.sharpness:
-        return Icons.deblur;
-    }
-  }
-}
+import 'editor/editor_types.dart';
+import 'editor/editor_image_processing.dart';
+import 'editor/editor_presets.dart';
+import 'editor/editor_history.dart';
+import 'editor/editor_comparison.dart';
 
 class EditorScreen extends StatefulWidget {
   final ValueChanged<int> onMoveTab;
@@ -117,16 +47,20 @@ class _EditorScreenState extends State<EditorScreen> {
   bool _isRenderingPreview = false;
   bool _isSaving = false;
   bool _showOriginalPreview = false;
+  bool _comparisonMode = false;
 
   Timer? _previewDebounce;
   int _previewJobId = 0;
 
-  _EditorAdjustment _activeAdjustment = _EditorAdjustment.brightness;
-  final Map<_EditorAdjustment, double> _adjustments = {
-    for (final adjustment in _EditorAdjustment.values) adjustment: 0,
+  EditorAdjustment _activeAdjustment = EditorAdjustment.brightness;
+  final Map<EditorAdjustment, double> _adjustments = {
+    for (final adjustment in EditorAdjustment.values) adjustment: 0,
   };
 
   final GeminiService _geminiService = GeminiService();
+
+  FilterPreset? _activePreset;
+  final EditorHistoryManager _history = EditorHistoryManager();
 
   @override
   void dispose() {
@@ -134,7 +68,7 @@ class _EditorScreenState extends State<EditorScreen> {
     super.dispose();
   }
 
-  double _valueOf(_EditorAdjustment adjustment) =>
+  double _valueOf(EditorAdjustment adjustment) =>
       _adjustments[adjustment] ?? 0;
 
   bool get _hasImage =>
@@ -155,13 +89,55 @@ class _EditorScreenState extends State<EditorScreen> {
       _previewBytes = _originalPreviewSourceBytes;
       _imageAspectRatio = _originalAspectRatio;
       _imageModified = false;
+      _comparisonMode = false;
       _resetAdjustmentsLocally();
     });
+    _pushHistory(includeBytes: true);
   }
 
   void _resetAllAdjustments() {
     setState(() {
       _resetAdjustmentsLocally();
+    });
+    _schedulePreviewRender();
+    _pushHistory();
+  }
+
+  void _pushHistory({bool includeBytes = false}) {
+    _history.push(EditorSnapshot(
+      adjustments: Map<EditorAdjustment, double>.from(_adjustments),
+      sourceBytes: includeBytes ? _sourceBytes : null,
+      previewSourceBytes: includeBytes ? _previewSourceBytes : null,
+      imageAspectRatio: includeBytes ? _imageAspectRatio : null,
+      imageModified: _imageModified,
+    ));
+    setState(() {});
+  }
+
+  void _undo() {
+    final snapshot = _history.undo();
+    if (snapshot == null) return;
+    _restoreSnapshot(snapshot);
+  }
+
+  void _redo() {
+    final snapshot = _history.redo();
+    if (snapshot == null) return;
+    _restoreSnapshot(snapshot);
+  }
+
+  void _restoreSnapshot(EditorSnapshot snapshot) {
+    setState(() {
+      for (final entry in snapshot.adjustments.entries) {
+        _adjustments[entry.key] = entry.value;
+      }
+      if (snapshot.sourceBytes != null) {
+        _sourceBytes = snapshot.sourceBytes;
+        _previewSourceBytes = snapshot.previewSourceBytes;
+        _imageAspectRatio = snapshot.imageAspectRatio;
+        _imageModified = snapshot.imageModified;
+      }
+      _activePreset = null;
     });
     _schedulePreviewRender();
   }
@@ -185,7 +161,7 @@ class _EditorScreenState extends State<EditorScreen> {
     });
 
     try {
-      final prepared = await compute(_prepareEditorBuffers, rawBytes);
+      final prepared = await compute(prepareEditorBuffers, rawBytes);
       if (!mounted) return;
 
       setState(() {
@@ -199,6 +175,8 @@ class _EditorScreenState extends State<EditorScreen> {
         _imageModified = false;
         _isPreparingImage = false;
       });
+      _history.clear();
+      _pushHistory(includeBytes: true);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -211,15 +189,28 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   void _resetAdjustmentsLocally() {
-    for (final adjustment in _EditorAdjustment.values) {
+    for (final adjustment in EditorAdjustment.values) {
       _adjustments[adjustment] = 0;
     }
-    _activeAdjustment = _EditorAdjustment.brightness;
+    _activeAdjustment = EditorAdjustment.brightness;
+    _activePreset = null;
+  }
+
+  void _applyPreset(FilterPreset preset) {
+    setState(() {
+      _activePreset = preset;
+      for (final entry in preset.values.entries) {
+        _adjustments[entry.key] = entry.value;
+      }
+    });
+    _schedulePreviewRender();
+    _pushHistory();
   }
 
   void _updateAdjustment(double value) {
     setState(() {
       _adjustments[_activeAdjustment] = value;
+      _activePreset = null;
     });
     _schedulePreviewRender();
   }
@@ -243,7 +234,7 @@ class _EditorScreenState extends State<EditorScreen> {
       }
 
       try {
-        final rendered = await compute(_renderAdjustedJpg, request);
+        final rendered = await compute(renderAdjustedJpg, request);
         if (!mounted || jobId != _previewJobId) return;
 
         setState(() {
@@ -262,12 +253,12 @@ class _EditorScreenState extends State<EditorScreen> {
   Map<String, dynamic> _buildRenderRequest(Uint8List bytes) {
     return {
       'bytes': bytes,
-      'brightness': _valueOf(_EditorAdjustment.brightness),
-      'contrast': _valueOf(_EditorAdjustment.contrast),
-      'saturation': _valueOf(_EditorAdjustment.saturation),
-      'warmth': _valueOf(_EditorAdjustment.warmth),
-      'fade': _valueOf(_EditorAdjustment.fade),
-      'sharpness': _valueOf(_EditorAdjustment.sharpness),
+      'brightness': _valueOf(EditorAdjustment.brightness),
+      'contrast': _valueOf(EditorAdjustment.contrast),
+      'saturation': _valueOf(EditorAdjustment.saturation),
+      'warmth': _valueOf(EditorAdjustment.warmth),
+      'fade': _valueOf(EditorAdjustment.fade),
+      'sharpness': _valueOf(EditorAdjustment.sharpness),
     };
   }
 
@@ -299,6 +290,7 @@ class _EditorScreenState extends State<EditorScreen> {
           _imageModified = true;
           _resetAdjustmentsLocally();
         });
+        _pushHistory(includeBytes: true);
         debugPrint('[EditorScreen] 이미지 업데이트 완료');
       } else {
         debugPrint('[EditorScreen] result null → 예외 throw');
@@ -327,7 +319,7 @@ class _EditorScreenState extends State<EditorScreen> {
     });
 
     try {
-      final prepared = await compute(_prepareEditorBuffers, result);
+      final prepared = await compute(prepareEditorBuffers, result);
       if (!mounted) return;
       setState(() {
         _sourceBytes = prepared['source'];
@@ -338,11 +330,64 @@ class _EditorScreenState extends State<EditorScreen> {
         _isPreparingImage = false;
         _resetAdjustmentsLocally();
       });
+      _pushHistory(includeBytes: true);
     } catch (error) {
       if (!mounted) return;
       setState(() => _isPreparingImage = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('자르기에 실패했습니다: $error')),
+      );
+    }
+  }
+
+  Future<void> _rotateImage() async {
+    if (_sourceBytes == null) return;
+    setState(() => _isPreparingImage = true);
+    try {
+      final rotated = await compute(rotateImage90, _sourceBytes!);
+      final prepared = await compute(prepareEditorBuffers, rotated);
+      if (!mounted) return;
+      setState(() {
+        _sourceBytes = prepared['source'];
+        _previewSourceBytes = prepared['preview'];
+        _previewBytes = prepared['preview'];
+        _imageAspectRatio = prepared['aspectRatio'] as double;
+        _imageModified = true;
+        _isPreparingImage = false;
+        _resetAdjustmentsLocally();
+      });
+      _pushHistory(includeBytes: true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isPreparingImage = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('회전에 실패했습니다: $error')),
+      );
+    }
+  }
+
+  Future<void> _flipImage() async {
+    if (_sourceBytes == null) return;
+    setState(() => _isPreparingImage = true);
+    try {
+      final flipped = await compute(flipImageHorizontal, _sourceBytes!);
+      final prepared = await compute(prepareEditorBuffers, flipped);
+      if (!mounted) return;
+      setState(() {
+        _sourceBytes = prepared['source'];
+        _previewSourceBytes = prepared['preview'];
+        _previewBytes = prepared['preview'];
+        _imageAspectRatio = prepared['aspectRatio'] as double;
+        _imageModified = true;
+        _isPreparingImage = false;
+        _resetAdjustmentsLocally();
+      });
+      _pushHistory(includeBytes: true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isPreparingImage = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('뒤집기에 실패했습니다: $error')),
       );
     }
   }
@@ -370,7 +415,7 @@ class _EditorScreenState extends State<EditorScreen> {
 
     try {
       final rendered = await compute(
-        _renderAdjustedJpg,
+        renderAdjustedJpg,
         _buildRenderRequest(_sourceBytes!),
       );
 
@@ -436,22 +481,46 @@ class _EditorScreenState extends State<EditorScreen> {
                 AppTopBar(
                   title: '보정',
                   onBack: widget.onBack,
-                  trailingWidth: 64,
-                  trailing: GestureDetector(
-                    onTap: _hasImage && !_isSaving ? _saveImage : null,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        '저장',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: _hasImage && !_isSaving
+                  trailingWidth: 120,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: _history.canUndo ? _undo : null,
+                        child: Icon(
+                          Icons.undo,
+                          size: 20,
+                          color: _history.canUndo
                               ? AppColors.primaryText
                               : AppColors.lightText,
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: _history.canRedo ? _redo : null,
+                        child: Icon(
+                          Icons.redo,
+                          size: 20,
+                          color: _history.canRedo
+                              ? AppColors.primaryText
+                              : AppColors.lightText,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      GestureDetector(
+                        onTap: _hasImage && !_isSaving ? _saveImage : null,
+                        child: Text(
+                          '저장',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: _hasImage && !_isSaving
+                                ? AppColors.primaryText
+                                : AppColors.lightText,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -468,6 +537,11 @@ class _EditorScreenState extends State<EditorScreen> {
                     const SizedBox(height: 10),
                     _buildFullResetButton(),
                   ],
+                  const SizedBox(height: 14),
+                  PresetStrip(
+                    activePreset: _activePreset,
+                    onSelect: _applyPreset,
+                  ),
                 ],
                 const SizedBox(height: 18),
                 _buildAdjustmentPanel(activeValue),
@@ -540,7 +614,14 @@ class _EditorScreenState extends State<EditorScreen> {
               fit: StackFit.expand,
               children: [
                 if (!_hasImage && !_isPreparingImage) const _PlusPlaceholder(),
-                if (_hasImage)
+                if (_hasImage && _comparisonMode && _originalPreviewSourceBytes != null)
+                  ComparisonView(
+                    originalBytes: _originalPreviewSourceBytes!,
+                    editedBytes: _previewBytes ?? _previewSourceBytes!,
+                    width: previewWidth,
+                    height: previewHeight,
+                  )
+                else if (_hasImage)
                   InteractiveViewer(
                     minScale: 1,
                     maxScale: 4,
@@ -674,25 +755,83 @@ class _EditorScreenState extends State<EditorScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
     );
 
-    return Row(
+    final smallButtonStyle = OutlinedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      foregroundColor: AppColors.primaryText,
+      side: const BorderSide(color: AppColors.border),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+    );
+
+    return Column(
       children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: _pickImage,
-            icon: const Icon(Icons.photo_library_outlined),
-            label: Text(_selectedImagePath == null ? '사진 추가' : '사진 바꾸기'),
-            style: buttonStyle,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _pickImage,
+                icon: const Icon(Icons.photo_library_outlined),
+                label: Text(_selectedImagePath == null ? '사진 추가' : '사진 바꾸기'),
+                style: buttonStyle,
+              ),
+            ),
+            if (_hasImage) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _openCropScreen,
+                  icon: const Icon(Icons.crop),
+                  label: const Text('자르기'),
+                  style: buttonStyle,
+                ),
+              ),
+            ],
+          ],
         ),
         if (_hasImage) ...[
-          const SizedBox(width: 10),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _openCropScreen,
-              icon: const Icon(Icons.crop),
-              label: const Text('자르기'),
-              style: buttonStyle,
-            ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _rotateImage,
+                  icon: const Icon(Icons.rotate_right, size: 18),
+                  label: const Text('회전'),
+                  style: smallButtonStyle,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _flipImage,
+                  icon: const Icon(Icons.flip, size: 18),
+                  label: const Text('뒤집기'),
+                  style: smallButtonStyle,
+                ),
+              ),
+              if (_hasAnyEdit) ...[
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _comparisonMode = !_comparisonMode;
+                      });
+                    },
+                    icon: Icon(
+                      _comparisonMode ? Icons.compare : Icons.compare_outlined,
+                      size: 18,
+                    ),
+                    label: Text(_comparisonMode ? '닫기' : '비교'),
+                    style: _comparisonMode
+                        ? smallButtonStyle.copyWith(
+                            backgroundColor: WidgetStatePropertyAll(AppColors.primaryText),
+                            foregroundColor: const WidgetStatePropertyAll(Colors.white),
+                          )
+                        : smallButtonStyle,
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ],
@@ -807,6 +946,7 @@ class _EditorScreenState extends State<EditorScreen> {
               divisions: 200,
               value: activeValue,
               onChanged: _hasImage ? _updateAdjustment : null,
+              onChangeEnd: _hasImage ? (_) => _pushHistory() : null,
             ),
           ),
           Padding(
@@ -833,10 +973,10 @@ class _EditorScreenState extends State<EditorScreen> {
       height: 96,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: _EditorAdjustment.values.length,
+        itemCount: EditorAdjustment.values.length,
         separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
-          final adjustment = _EditorAdjustment.values[index];
+          final adjustment = EditorAdjustment.values[index];
           final selected = adjustment == _activeAdjustment;
 
           return SizedBox(
@@ -952,170 +1092,6 @@ class _AdjustmentChip extends StatelessWidget {
   }
 }
 
-Map<String, dynamic> _prepareEditorBuffers(Uint8List rawBytes) {
-  final decoded = img.decodeImage(rawBytes);
-  if (decoded == null) {
-    throw Exception('이미지를 해석할 수 없습니다.');
-  }
-
-  final normalized = img.bakeOrientation(decoded);
-  final exportBase = _resizeImageToMaxDimension(
-    normalized,
-    _editorExportMaxDimension,
-  );
-  final sourceBytes = Uint8List.fromList(
-    img.encodeJpg(exportBase, quality: 92),
-  );
-
-  final previewBase = _resizeImageToMaxDimension(
-    exportBase,
-    _editorPreviewMaxDimension,
-  );
-
-  final previewBytes = Uint8List.fromList(
-    img.encodeJpg(previewBase, quality: 92),
-  );
-
-  return {
-    'source': sourceBytes,
-    'preview': previewBytes,
-    'aspectRatio': normalized.width / normalized.height,
-  };
-}
-
-Uint8List _renderAdjustedJpg(Map<String, dynamic> request) {
-  final bytes = request['bytes'] as Uint8List;
-  final brightness = (request['brightness'] as num).toDouble();
-  final contrast = (request['contrast'] as num).toDouble();
-  final saturation = (request['saturation'] as num).toDouble();
-  final warmth = (request['warmth'] as num).toDouble();
-  final fade = (request['fade'] as num).toDouble();
-  final sharpness = (request['sharpness'] as num).toDouble();
-
-  final decoded = img.decodeImage(bytes);
-  if (decoded == null) {
-    throw Exception('이미지를 해석할 수 없습니다.');
-  }
-
-  var edited = _applyEditorAdjustments(
-    decoded,
-    brightness: brightness,
-    contrast: contrast,
-    saturation: saturation,
-    warmth: warmth,
-    fade: fade,
-  );
-
-  if (sharpness != 0) {
-    edited = _applySharpness(edited, sharpness);
-  }
-
-  return Uint8List.fromList(img.encodeJpg(edited, quality: 90));
-}
-
-img.Image _applyEditorAdjustments(
-  img.Image source, {
-  required double brightness,
-  required double contrast,
-  required double saturation,
-  required double warmth,
-  required double fade,
-}) {
-  final output = img.Image.from(source);
-
-  final brightnessOffset = brightness * 2.2;
-  final contrastScaled = contrast.clamp(-99.0, 99.0) * 2.55;
-  final contrastFactor =
-      (259 * (contrastScaled + 255)) / (255 * (259 - contrastScaled));
-  final saturationFactor = 1 + (saturation / 100);
-  final warmthFactor = warmth / 100;
-  final fadeFactor = fade / 100;
-
-  for (int y = 0; y < output.height; y++) {
-    for (int x = 0; x < output.width; x++) {
-      final pixel = output.getPixel(x, y);
-
-      double r = pixel.r.toDouble();
-      double g = pixel.g.toDouble();
-      double b = pixel.b.toDouble();
-      final int a = pixel.a.toInt();
-
-      r += brightnessOffset;
-      g += brightnessOffset;
-      b += brightnessOffset;
-
-      r = contrastFactor * (r - 128) + 128;
-      g = contrastFactor * (g - 128) + 128;
-      b = contrastFactor * (b - 128) + 128;
-
-      final luminance = (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
-      r = luminance + ((r - luminance) * saturationFactor);
-      g = luminance + ((g - luminance) * saturationFactor);
-      b = luminance + ((b - luminance) * saturationFactor);
-
-      r += 30 * warmthFactor;
-      g += 8 * warmthFactor;
-      b -= 30 * warmthFactor;
-
-      if (fadeFactor >= 0) {
-        r = (r * (1 - (fadeFactor * 0.18))) + (255 * fadeFactor * 0.10);
-        g = (g * (1 - (fadeFactor * 0.16))) + (255 * fadeFactor * 0.08);
-        b = (b * (1 - (fadeFactor * 0.14))) + (255 * fadeFactor * 0.06);
-      } else {
-        final deepen = fadeFactor.abs();
-        r = (r * (1 + (deepen * 0.16))) - (255 * deepen * 0.08);
-        g = (g * (1 + (deepen * 0.15))) - (255 * deepen * 0.07);
-        b = (b * (1 + (deepen * 0.14))) - (255 * deepen * 0.06);
-      }
-
-      output.setPixelRgba(
-        x,
-        y,
-        _clampChannel(r),
-        _clampChannel(g),
-        _clampChannel(b),
-        a,
-      );
-    }
-  }
-
-  return output;
-}
-
-int _clampChannel(double value) {
-  if (value.isNaN) return 0;
-  if (value < 0) return 0;
-  if (value > 255) return 255;
-  return value.round();
-}
-
-img.Image _applySharpness(img.Image source, double sharpness) {
-  if (sharpness > 0) {
-    final amount = sharpness / 100 * 1.5;
-    final blurred = img.gaussianBlur(img.Image.from(source), radius: 2);
-    final output = img.Image.from(source);
-
-    for (int y = 0; y < output.height; y++) {
-      for (int x = 0; x < output.width; x++) {
-        final orig = source.getPixel(x, y);
-        final blur = blurred.getPixel(x, y);
-
-        output.setPixelRgba(
-          x,
-          y,
-          _clampChannel(orig.r + amount * (orig.r - blur.r)),
-          _clampChannel(orig.g + amount * (orig.g - blur.g)),
-          _clampChannel(orig.b + amount * (orig.b - blur.b)),
-          orig.a.toInt(),
-        );
-      }
-    }
-    return output;
-  } else {
-    final radius = (sharpness.abs() / 100 * 5).round().clamp(1, 5);
-    return img.gaussianBlur(source, radius: radius);
-  }
-}
 
 class _AiEditSheet extends StatefulWidget {
   final Future<void> Function(String prompt) onGenerate;
@@ -1276,18 +1252,3 @@ class _AiEditSheetState extends State<_AiEditSheet> {
   }
 }
 
-img.Image _resizeImageToMaxDimension(img.Image source, int maxDimension) {
-  final longestSide = source.width >= source.height
-      ? source.width
-      : source.height;
-
-  if (longestSide <= maxDimension) {
-    return source;
-  }
-
-  if (source.width >= source.height) {
-    return img.copyResize(source, width: maxDimension);
-  }
-
-  return img.copyResize(source, height: maxDimension);
-}
