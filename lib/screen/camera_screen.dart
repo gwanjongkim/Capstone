@@ -11,7 +11,7 @@ import '../models/composition_candidate.dart';
 import '../services/composition_candidate_generator.dart';
 import '../services/composition_scorer.dart';
 import '../services/composition_stabilizer.dart';
-import '../services/level_provider.dart';
+import '../services/level_provider.dart' show LevelProviderBase, StubLevelProvider;
 import '../subject_detection.dart' show detectModelPath, detectionConfidenceThreshold;
 import '../subject_selector.dart';
 import '../widget/composition_overlay_painter.dart';
@@ -67,9 +67,20 @@ class _CameraScreenState extends State<CameraScreen> {
 
   final CompositionCandidateGenerator _candidateGenerator =
       CompositionCandidateGenerator();
-  final CompositionScorer _scorer = const CompositionScorer();
+  // Declared as the abstract base type so any CompositionScorerBase subclass
+  // (e.g. an ML aesthetic scorer) can be swapped in without touching the rest
+  // of this file.
+  final CompositionScorerBase _scorer = const HeuristicCompositionScorer();
   final CompositionStabilizer _stabilizer = CompositionStabilizer();
-  final LevelProvider _levelProvider = const LevelProvider();
+  // Declared as abstract base; replace with a real sensor subclass when ready.
+  final LevelProviderBase _levelProvider = const StubLevelProvider();
+
+  // Throttle candidate generation+scoring to avoid unnecessary CPU load on
+  // every raw detection callback.  Stabilisation (EMA smoothing) still runs
+  // every frame so the active box animates fluidly.
+  static const _kCompositionInterval = Duration(milliseconds: 150);
+  DateTime? _lastCompositionTime;
+  List<CompositionCandidate> _cachedRankedCandidates = [];
 
   @override
   void initState() {
@@ -213,6 +224,8 @@ class _CameraScreenState extends State<CameraScreen> {
         _stabilizer.reset();
         _activeCompositionCandidate = null;
         _allCandidates = [];
+        _cachedRankedCandidates = [];
+        _lastCompositionTime = null;
       }
     });
   }
@@ -234,18 +247,35 @@ class _CameraScreenState extends State<CameraScreen> {
     CompositionCandidate? newActiveCandidate;
     List<CompositionCandidate> newAllCandidates = [];
     if (_compositionMode) {
-      final subjectBox = currentMain?.normalizedBox;
-      final candidates = _candidateGenerator.generate(
-        previewSize: previewSize,
-        subjectNormalized: subjectBox,
-      );
-      final scored = _scorer.score(
-        candidates: candidates,
-        subjectNormalized: subjectBox,
-        previewSize: previewSize,
-      );
-      newActiveCandidate = _stabilizer.stabilize(scored);
-      newAllCandidates = scored;
+      // Resolve the effective subject ONCE so both candidate generation and
+      // scoring operate on the same assumptions.  When no detection is present
+      // both services receive the canonical fallback rect (not null), which
+      // means the generator's placement strategies and the scorer's containment
+      // / thirds logic are always in sync.
+      final effectiveSubject = currentMain?.normalizedBox ??
+          CompositionCandidateGenerator.kNoSubjectFallback;
+
+      // Throttle generation + scoring: only recompute every 150 ms.
+      // Stabilisation (EMA box smoothing) still runs every frame below so the
+      // active composition box animates fluidly even when scoring is skipped.
+      final now = DateTime.now();
+      if (_lastCompositionTime == null ||
+          now.difference(_lastCompositionTime!) >= _kCompositionInterval) {
+        _lastCompositionTime = now;
+        final candidates = _candidateGenerator.generate(
+          previewSize: previewSize,
+          subjectNormalized: effectiveSubject,
+        );
+        _cachedRankedCandidates = _scorer.score(
+          candidates: candidates,
+          subjectNormalized: effectiveSubject,
+          previewSize: previewSize,
+        );
+      }
+
+      // Stabiliser runs every frame for smooth rendering.
+      newActiveCandidate = _stabilizer.stabilize(_cachedRankedCandidates);
+      newAllCandidates = _cachedRankedCandidates;
     }
 
     setState(() {
@@ -441,7 +471,11 @@ class _CameraScreenState extends State<CameraScreen> {
                     activeCandidate: _activeCompositionCandidate,
                     allCandidates: _allCandidates,
                     showDebug: _showCompDebug,
-                    showLevelGuide: _levelProvider.isLevel(),
+                    // Pass the actual tilt value (null = hide guide).
+                    // A real LevelProviderBase subclass will supply live data.
+                    tiltAngle: _levelProvider.isLevel()
+                        ? _levelProvider.tiltAngle
+                        : null,
                   ),
                   size: Size.infinite,
                 ),

@@ -10,12 +10,18 @@ import '../models/composition_candidate.dart';
 /// - Rule-of-thirds grid inside the crop
 /// - Optional debug info (candidate label + score)
 /// - Optional debug view of runner-up candidates
-/// - Optional level guide line (placeholder – no IMU integration yet)
+/// - Optional level guide line (uses [tiltAngle] when provided)
 class CompositionOverlayPainter extends CustomPainter {
   final CompositionCandidate? activeCandidate;
   final List<CompositionCandidate>? allCandidates;
   final bool showDebug;
-  final bool showLevelGuide;
+
+  /// When non-null, a level guide is rendered.
+  ///
+  /// Pass [LevelProviderBase.tiltAngle] here.  Future implementations can use
+  /// the value to rotate the guide line, display a numeric indicator, etc.
+  /// Passing null hides the guide entirely.
+  final double? tiltAngle;
 
   static const Color _gold = Color(0xFFFFD700);
   static const Color _goldFaint = Color(0x50FFD700);
@@ -25,7 +31,7 @@ class CompositionOverlayPainter extends CustomPainter {
     required this.activeCandidate,
     this.allCandidates,
     this.showDebug = false,
-    this.showLevelGuide = false,
+    this.tiltAngle,
   });
 
   @override
@@ -63,9 +69,9 @@ class CompositionOverlayPainter extends CustomPainter {
       _drawDebugLabel(canvas, px, active);
     }
 
-    // Level guide.
-    if (showLevelGuide) {
-      _drawLevelGuide(canvas, size);
+    // Level guide — only when caller supplies a tilt value.
+    if (tiltAngle != null) {
+      _drawLevelGuide(canvas, size, tiltAngle!);
     }
   }
 
@@ -192,8 +198,14 @@ class CompositionOverlayPainter extends CustomPainter {
     }
   }
 
-  void _drawLevelGuide(Canvas canvas, Size size) {
-    // Placeholder: a subtle horizon line through the vertical midpoint.
+  /// Draws a horizon level guide.
+  ///
+  /// [tilt] is in radians (positive = clockwise).  Currently the line is drawn
+  /// horizontally through the vertical midpoint regardless of tilt value; a
+  /// future implementation can rotate the canvas by [tilt] to produce a true
+  /// rolling-horizon indicator.
+  void _drawLevelGuide(Canvas canvas, Size size, double tilt) {
+    // TODO(imu): rotate canvas by [tilt] once a real sensor is integrated.
     final cy = size.height / 2;
     final paint = Paint()
       ..color = const Color(0x55FFFFFF)
@@ -210,6 +222,13 @@ class CompositionOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CompositionOverlayPainter old) {
-    return old.activeCandidate != activeCandidate || old.showDebug != showDebug;
+    // Repaint whenever any visible input changes.
+    // allCandidates comparison by reference is sufficient: the pipeline always
+    // assigns a new list object to _allCandidates in setState, so a changed
+    // runner-up set will always produce a different reference.
+    return old.activeCandidate != activeCandidate ||
+        old.showDebug != showDebug ||
+        old.allCandidates != allCandidates ||
+        old.tiltAngle != tiltAngle;
   }
 }

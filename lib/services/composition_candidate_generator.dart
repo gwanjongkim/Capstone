@@ -12,6 +12,12 @@ import '../models/composition_candidate.dart';
 /// Replace or extend [generate] to feed subject detection results from ML
 /// models in the future.
 class CompositionCandidateGenerator {
+  /// Canonical fallback subject used when no detection is available.
+  ///
+  /// Exposed as a constant so the calling site (e.g. [_CameraScreenState]) can
+  /// resolve the effective subject ONCE and pass the same rect to both the
+  /// generator and the scorer, keeping their assumptions consistent.
+  static const Rect kNoSubjectFallback = Rect.fromLTWH(0.30, 0.20, 0.40, 0.60);
   static const List<_AspectConfig> _aspects = [
     _AspectConfig(ratio: 1.0, label: '1:1'),
     _AspectConfig(ratio: 4 / 3, label: '4:3'),
@@ -31,9 +37,10 @@ class CompositionCandidateGenerator {
     final previewAspect =
         previewSize.width / previewSize.height.clamp(1.0, double.infinity);
 
-    // Fallback: assume subject is roughly centered if detection is unavailable.
-    final subject =
-        subjectNormalized ?? const Rect.fromLTWH(0.30, 0.20, 0.40, 0.60);
+    // Fallback: assume subject is roughly centred if detection is unavailable.
+    // Callers that care about consistency should resolve this themselves using
+    // [kNoSubjectFallback] and pass it explicitly as [subjectNormalized].
+    final subject = subjectNormalized ?? kNoSubjectFallback;
 
     final candidates = <CompositionCandidate>[];
 
