@@ -1,35 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../models/composition_candidate.dart';
+import '../services/composition_feedback_service.dart';
 
 /// Paints an AR-style composition overlay on the camera preview.
-///
-/// Visual elements:
-/// - Dimming outside the active crop rect
-/// - Gold border with corner brackets
-/// - Rule-of-thirds grid inside the crop
-/// - Optional debug info (candidate label + score)
-/// - Optional debug view of runner-up candidates
-/// - Optional level guide line (uses [tiltAngle] when provided)
 class CompositionOverlayPainter extends CustomPainter {
   final CompositionCandidate? activeCandidate;
-  final List<CompositionCandidate>? allCandidates;
+  final FeedbackResult feedback;
   final bool showDebug;
-
-  /// When non-null, a level guide is rendered.
-  ///
-  /// Pass [LevelProviderBase.tiltAngle] here.  Future implementations can use
-  /// the value to rotate the guide line, display a numeric indicator, etc.
-  /// Passing null hides the guide entirely.
   final double? tiltAngle;
 
-  static const Color _gold = Color(0xFFFFD700);
-  static const Color _goldFaint = Color(0x50FFD700);
+  static const Color _guideColor = Color(0x66FFFFFF);
+  static const Color _almostColor = Color(0xFFFFD700);
+  static const Color _goodColor = Color(0xFF4ADE80);
   static const Color _dimColor = Color(0x66000000);
 
   const CompositionOverlayPainter({
     required this.activeCandidate,
-    this.allCandidates,
+    required this.feedback,
     this.showDebug = false,
     this.tiltAngle,
   });
@@ -37,198 +25,166 @@ class CompositionOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final active = activeCandidate;
-    if (active == null) return;
 
-    final rn = active.renderRect;
-    final px = Rect.fromLTRB(
-      rn.left * size.width,
-      rn.top * size.height,
-      rn.right * size.width,
-      rn.bottom * size.height,
-    );
+    if (active == null || feedback.state == ReadinessState.guide) {
+      _drawGuideState(canvas, size);
+    } else {
+      final Color feedbackColor;
+      double strokeWidth = 2.0;
+      switch (feedback.state) {
+        case ReadinessState.almost:
+          feedbackColor = _almostColor;
+          break;
+        case ReadinessState.good:
+          feedbackColor = _goodColor;
+          strokeWidth = 3.0; // Make border thicker when 'good'
+          break;
+        case ReadinessState.guide:
+          feedbackColor = _guideColor;
+          break;
+      }
 
-    // Debug: runner-up candidates (drawn first so active is on top).
-    if (showDebug) {
-      _drawRunnerUps(canvas, size, allCandidates);
+      final rn = active.renderRect;
+      final px = Rect.fromLTRB(
+        rn.left * size.width,
+        rn.top * size.height,
+        rn.right * size.width,
+        rn.bottom * size.height,
+      );
+
+      _drawDimming(canvas, size, px);
+      _drawCropBorder(canvas, px, feedbackColor, strokeWidth);
+      _drawCornerBrackets(canvas, px, feedbackColor, strokeWidth);
+      _drawThirdsGrid(canvas, px, feedbackColor.withAlpha(76)); // 0.3 * 255 = 76.5
+
+      if (showDebug) {
+        _drawDebugLabel(canvas, px, active, feedback);
+      }
     }
 
-    // Dimming regions outside the active crop.
-    _drawDimming(canvas, size, px);
-
-    // Active crop border.
-    _drawCropBorder(canvas, px);
-
-    // Corner bracket marks.
-    _drawCornerBrackets(canvas, px);
-
-    // Rule-of-thirds grid inside the crop.
-    _drawThirdsGrid(canvas, px);
-
-    // Debug: label + score.
-    if (showDebug) {
-      _drawDebugLabel(canvas, px, active);
-    }
-
-    // Level guide — only when caller supplies a tilt value.
     if (tiltAngle != null) {
       _drawLevelGuide(canvas, size, tiltAngle!);
     }
   }
 
+  void _drawGuideState(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final width = size.width * 0.8;
+    final height = width / (3 / 2);
+    final rect = Rect.fromCenter(center: center, width: width, height: height);
+    final paint = Paint()
+      ..color = _guideColor.withAlpha(128) // 0.5 * 255 = 127.5
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawRect(rect, paint);
+  }
+
   void _drawDimming(Canvas canvas, Size size, Rect crop) {
     final paint = Paint()..color = _dimColor;
-    // Top strip.
     canvas.drawRect(Rect.fromLTRB(0, 0, size.width, crop.top), paint);
-    // Bottom strip.
     canvas.drawRect(
         Rect.fromLTRB(0, crop.bottom, size.width, size.height), paint);
-    // Left strip.
-    canvas.drawRect(
-        Rect.fromLTRB(0, crop.top, crop.left, crop.bottom), paint);
-    // Right strip.
+    canvas.drawRect(Rect.fromLTRB(0, crop.top, crop.left, crop.bottom), paint);
     canvas.drawRect(
         Rect.fromLTRB(crop.right, crop.top, size.width, crop.bottom), paint);
   }
 
-  void _drawCropBorder(Canvas canvas, Rect rect) {
-    // Soft shadow stroke behind the accent.
+  void _drawCropBorder(Canvas canvas, Rect rect, Color color, double width) {
     canvas.drawRect(
       rect,
       Paint()
         ..color = const Color(0x80000000)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 5,
+        ..strokeWidth = width + 2,
     );
-    // Gold accent stroke.
     canvas.drawRect(
       rect,
       Paint()
-        ..color = _gold
+        ..color = color
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0,
+        ..strokeWidth = width,
     );
   }
 
-  void _drawCornerBrackets(Canvas canvas, Rect rect) {
+  void _drawCornerBrackets(Canvas canvas, Rect rect, Color color, double width) {
     final paint = Paint()
-      ..color = _gold
+      ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0
+      ..strokeWidth = width + 1.0
       ..strokeCap = StrokeCap.square;
-
     const len = 18.0;
-
-    // Top-left
     canvas.drawLine(
         Offset(rect.left, rect.top + len), Offset(rect.left, rect.top), paint);
     canvas.drawLine(
         Offset(rect.left, rect.top), Offset(rect.left + len, rect.top), paint);
-    // Top-right
     canvas.drawLine(Offset(rect.right - len, rect.top),
         Offset(rect.right, rect.top), paint);
     canvas.drawLine(Offset(rect.right, rect.top),
         Offset(rect.right, rect.top + len), paint);
-    // Bottom-left
     canvas.drawLine(Offset(rect.left, rect.bottom - len),
         Offset(rect.left, rect.bottom), paint);
     canvas.drawLine(Offset(rect.left, rect.bottom),
         Offset(rect.left + len, rect.bottom), paint);
-    // Bottom-right
     canvas.drawLine(Offset(rect.right - len, rect.bottom),
         Offset(rect.right, rect.bottom), paint);
     canvas.drawLine(Offset(rect.right, rect.bottom),
         Offset(rect.right, rect.bottom - len), paint);
   }
 
-  void _drawThirdsGrid(Canvas canvas, Rect rect) {
+  void _drawThirdsGrid(Canvas canvas, Rect rect, Color color) {
     final paint = Paint()
-      ..color = _goldFaint
+      ..color = color
       ..strokeWidth = 0.8;
-
     final dx1 = rect.left + rect.width / 3;
     final dx2 = rect.left + rect.width * 2 / 3;
     final dy1 = rect.top + rect.height / 3;
     final dy2 = rect.top + rect.height * 2 / 3;
-
     canvas.drawLine(Offset(dx1, rect.top), Offset(dx1, rect.bottom), paint);
     canvas.drawLine(Offset(dx2, rect.top), Offset(dx2, rect.bottom), paint);
     canvas.drawLine(Offset(rect.left, dy1), Offset(rect.right, dy1), paint);
     canvas.drawLine(Offset(rect.left, dy2), Offset(rect.right, dy2), paint);
   }
 
-  void _drawDebugLabel(Canvas canvas, Rect rect, CompositionCandidate c) {
+  void _drawDebugLabel(
+      Canvas canvas, Rect rect, CompositionCandidate c, FeedbackResult feedback) {
+    final stateStr = feedback.state.toString().split('.').last;
     final text =
-        '${c.label}  ${(c.score * 100).toStringAsFixed(0)}%';
+        'Align: ${feedback.alignmentScore.toStringAsFixed(2)} | State: $stateStr | Ready: ${feedback.isShutterReady}';
     final tp = TextPainter(
       text: TextSpan(
         text: text,
         style: const TextStyle(
-          color: _gold,
-          fontSize: 10,
+          color: Colors.white,
+          fontSize: 11,
           fontWeight: FontWeight.w700,
           shadows: [Shadow(color: Colors.black, blurRadius: 4)],
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    tp.paint(
-        canvas, Offset(rect.left + 4, (rect.bottom + 4).clamp(0, double.infinity)));
+    tp.paint(canvas,
+        Offset(rect.left + 4, (rect.bottom + 6).clamp(0, double.infinity)));
   }
 
-  void _drawRunnerUps(
-      Canvas canvas, Size size, List<CompositionCandidate>? all) {
-    if (all == null) return;
-    final paint = Paint()
-      ..color = const Color(0x28FFFFFF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-
-    // Draw up to 4 runner-up candidates (skip the best one).
-    for (final c in all.skip(1).take(4)) {
-      final r = c.normalizedRect;
-      canvas.drawRect(
-        Rect.fromLTRB(
-          r.left * size.width,
-          r.top * size.height,
-          r.right * size.width,
-          r.bottom * size.height,
-        ),
-        paint,
-      );
-    }
-  }
-
-  /// Draws a horizon level guide.
-  ///
-  /// [tilt] is in radians (positive = clockwise).  Currently the line is drawn
-  /// horizontally through the vertical midpoint regardless of tilt value; a
-  /// future implementation can rotate the canvas by [tilt] to produce a true
-  /// rolling-horizon indicator.
   void _drawLevelGuide(Canvas canvas, Size size, double tilt) {
-    // TODO(imu): rotate canvas by [tilt] once a real sensor is integrated.
     final cy = size.height / 2;
     final paint = Paint()
       ..color = const Color(0x55FFFFFF)
       ..strokeWidth = 1;
     canvas.drawLine(
         Offset(size.width * 0.38, cy), Offset(size.width * 0.62, cy), paint);
-    // Centre dot.
     canvas.drawCircle(
       Offset(size.width / 2, cy),
       3,
       Paint()..color = const Color(0xAAFFFFFF),
     );
   }
-
+  
   @override
   bool shouldRepaint(covariant CompositionOverlayPainter old) {
-    // Repaint whenever any visible input changes.
-    // allCandidates comparison by reference is sufficient: the pipeline always
-    // assigns a new list object to _allCandidates in setState, so a changed
-    // runner-up set will always produce a different reference.
     return old.activeCandidate != activeCandidate ||
+        old.feedback != feedback ||
         old.showDebug != showDebug ||
-        old.allCandidates != allCandidates ||
         old.tiltAngle != tiltAngle;
   }
 }

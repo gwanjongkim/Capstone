@@ -14,6 +14,10 @@ class CompositionCandidate {
   final double score;
   final String label;
 
+  /// How well the subject is aligned with this composition, from 0.0 to 1.0.
+  /// Set by the composition pipeline, used by the painter for visual feedback.
+  final double alignmentScore;
+
   const CompositionCandidate({
     required this.id,
     required this.normalizedRect,
@@ -21,18 +25,25 @@ class CompositionCandidate {
     required this.targetAspectRatio,
     required this.score,
     required this.label,
+    this.alignmentScore = 0.0,
   });
 
   Rect get renderRect => smoothedRect ?? normalizedRect;
 
-  CompositionCandidate copyWith({double? score, Rect? smoothedRect}) {
+  CompositionCandidate copyWith({
+    Rect? normalizedRect,
+    double? score,
+    Rect? smoothedRect,
+    double? alignmentScore,
+  }) {
     return CompositionCandidate(
       id: id,
-      normalizedRect: normalizedRect,
+      normalizedRect: normalizedRect ?? this.normalizedRect,
       smoothedRect: smoothedRect ?? this.smoothedRect,
       targetAspectRatio: targetAspectRatio,
       score: score ?? this.score,
       label: label,
+      alignmentScore: alignmentScore ?? this.alignmentScore,
     );
   }
 }
