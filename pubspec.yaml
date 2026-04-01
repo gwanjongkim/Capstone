@@ -44,8 +44,7 @@ dependencies:
   permission_handler: any
   sensors_plus: ^4.0.2
   http: ^1.2.0
-  tflite_flutter: ^0.12.1
-
+  flutter_dotenv: ^5.2.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -81,6 +80,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - .env
     - assets/models/
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
