@@ -11,4 +11,28 @@ extension PhotoTypeModeX on PhotoTypeMode {
         return '자동';
     }
   }
+
+  /// Aesthetic 점수 가중치 (wA)
+  double get aestheticWeight {
+    switch (this) {
+      case PhotoTypeMode.portrait:
+        return 0.65;
+      case PhotoTypeMode.snap:
+        return 0.70;
+      case PhotoTypeMode.auto:
+        return 0.60;
+    }
+  }
+
+  /// Technical 점수 가중치 (wT)
+  double get technicalWeight {
+    switch (this) {
+      case PhotoTypeMode.portrait:
+        return 0.35;
+      case PhotoTypeMode.snap:
+        return 0.30;
+      case PhotoTypeMode.auto:
+        return 0.40;
+    }
+  }
 }
