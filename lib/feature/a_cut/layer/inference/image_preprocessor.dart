@@ -24,19 +24,6 @@ class ImagePreprocessor {
       ),
     );
   }
-
-  Future<Uint8List> preprocessToNimaInput(
-    Uint8List imageBytes, {
-    required int width,
-    required int height,
-  }) {
-    return preprocessToRgbFloat32(
-      imageBytes,
-      width: width,
-      height: height,
-      normalization: ImageNormalization.minusOneToOne,
-    );
-  }
 }
 
 class _PreprocessRequest {

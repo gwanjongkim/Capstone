@@ -4,6 +4,7 @@ import '../../model/model_score_detail.dart';
 import 'aesthetic_model_contract.dart';
 import 'image_preprocessor.dart';
 import 'tflite_interpreter_manager.dart';
+import 'tflite_model_metadata_loader.dart';
 
 class TflitePhotoScoreSummary {
   final double technicalScore;
@@ -28,16 +29,19 @@ class TflitePhotoScoreSummary {
 class TfliteAestheticService {
   TfliteAestheticService({
     TfliteInterpreterManager? interpreterManager,
+    TfliteModelMetadataLoader? metadataLoader,
     ImagePreprocessor? preprocessor,
     List<AestheticModelContract>? technicalModels,
     List<AestheticModelContract>? aestheticModels,
   }) : _interpreterManager =
            interpreterManager ?? TfliteInterpreterManager.instance,
+       _metadataLoader = metadataLoader ?? TfliteModelMetadataLoader.instance,
        _preprocessor = preprocessor ?? const ImagePreprocessor(),
        _technicalModels = technicalModels ?? defaultTechnicalModelContracts,
        _aestheticModels = aestheticModels ?? const [];
 
   final TfliteInterpreterManager _interpreterManager;
+  final TfliteModelMetadataLoader _metadataLoader;
   final ImagePreprocessor _preprocessor;
   final List<AestheticModelContract> _technicalModels;
   final List<AestheticModelContract> _aestheticModels;
@@ -46,17 +50,24 @@ class TfliteAestheticService {
     final inputCache = <String, Future<Uint8List>>{};
     final scoreDetails = <ModelScoreDetail>[];
     final warnings = <String>[];
+    final resolvedConfigs = <ResolvedAestheticModelConfig>[];
 
     for (final contract in [..._technicalModels, ..._aestheticModels]) {
+      final metadataResult = await _metadataLoader.loadForModelAsset(
+        contract.assetPath,
+      );
+      final resolvedConfig = contract.resolve(metadataResult: metadataResult);
+      resolvedConfigs.add(resolvedConfig);
+
       try {
         final detail = await _runContract(
           imageBytes,
-          contract,
+          resolvedConfig,
           inputCache: inputCache,
         );
         scoreDetails.add(detail);
       } catch (_) {
-        warnings.add('${contract.label} 모델을 실행하지 못했습니다.');
+        warnings.add('${resolvedConfig.displayLabel} 모델을 실행하지 못했습니다.');
       }
     }
 
@@ -88,13 +99,20 @@ class TfliteAestheticService {
       scoreDetails: scoreDetails,
       warnings: warnings,
       usesTechnicalScoreAsFinal: usesTechnicalScoreAsFinal,
-      modelVersion: scoreDetails.map((detail) => detail.id).join('+'),
+      modelVersion: resolvedConfigs
+          .where(
+            (config) => scoreDetails.any((detail) => detail.id == config.id),
+          )
+          .map(
+            (config) => config.metadataBacked ? config.id : '${config.id}_fallback',
+          )
+          .join('+'),
     );
   }
 
   Future<ModelScoreDetail> _runContract(
     Uint8List imageBytes,
-    AestheticModelContract contract, {
+    ResolvedAestheticModelConfig contract, {
     required Map<String, Future<Uint8List>> inputCache,
   }) async {
     final interpreter = await _interpreterManager.getInterpreter(
@@ -111,6 +129,16 @@ class TfliteAestheticService {
         normalization: contract.normalization,
       ),
     );
+
+    if (contract.inputDtype != 'float32') {
+      throw Exception('Unsupported input dtype: ${contract.inputDtype}');
+    }
+    if (contract.colorFormat != 'RGB') {
+      throw Exception('Unsupported color format: ${contract.colorFormat}');
+    }
+    if (contract.tensorLayout != 'NHWC') {
+      throw Exception('Unsupported tensor layout: ${contract.tensorLayout}');
+    }
 
     final inputShape = interpreter.getInputTensor(0).shape;
     if (inputShape.length != 4 ||
@@ -133,12 +161,12 @@ class TfliteAestheticService {
 
     return ModelScoreDetail(
       id: contract.id,
-      label: contract.label,
+      label: contract.displayLabel,
       dimension: contract.dimension,
       rawScore: contract.readRawScore(outputValues),
       normalizedScore: contract.normalizeOutput(outputValues),
       weight: contract.weight,
-      interpretation: _interpretationFor(contract),
+      interpretation: contract.displayInterpretation,
     );
   }
 
@@ -158,16 +186,5 @@ class TfliteAestheticService {
     );
 
     return (weightedSum / totalWeight).clamp(0.0, 1.0).toDouble();
-  }
-
-  String _interpretationFor(AestheticModelContract contract) {
-    switch (contract.outputType) {
-      case AestheticModelOutputType.scalarPercent:
-        return 'raw / 100 -> [0,1]';
-      case AestheticModelOutputType.scalarUnitInterval:
-        return 'sigmoid output in [0,1]';
-      case AestheticModelOutputType.distribution:
-        return 'distribution mean -> [0,1]';
-    }
   }
 }

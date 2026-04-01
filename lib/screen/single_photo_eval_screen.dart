@@ -238,7 +238,7 @@ class _ResultView extends StatelessWidget {
           if (result.usesTechnicalScoreAsFinal) ...[
             const SizedBox(height: 12),
             const _InfoBanner(
-              text: 'metadata.json 없이 모델 계약을 코드에 고정해 사용 중이므로, 현재 종합 점수는 기술 점수 중심으로 동작합니다.',
+              text: '현재는 metadata.json에 정의된 KonIQ/FLIVE-image 입력·출력 규칙을 따라 계산한 기술 점수를 종합 점수로 사용합니다.',
             ),
           ],
           if (result.scoreDetails.isNotEmpty) ...[
