@@ -97,6 +97,8 @@ class PhotoEvaluationResult {
 
   int get technicalPct => (technicalScore * 100).round();
 
+  bool get hasAestheticScore => aestheticScore != null;
+
   int? get aestheticPct {
     final score = aestheticScore;
     if (score == null) {
@@ -115,17 +117,49 @@ class PhotoEvaluationResult {
         (detail) => detail.dimension == ModelScoreDimension.aesthetic,
       );
 
+  String get qualitySummary {
+    switch (verdictLevel) {
+      case VerdictLevel.excellent:
+        return '대표 컷으로 바로 써도 좋을 만큼 완성도가 높아요.';
+      case VerdictLevel.good:
+        return '후보 컷으로 올리기 좋은 안정적인 결과예요.';
+      case VerdictLevel.average:
+        return '무난한 결과지만 더 좋은 컷이 있을 수 있어요.';
+      case VerdictLevel.needsWork:
+        return '조금만 다시 촬영하면 더 좋아질 수 있어요.';
+    }
+  }
+
+  String get primaryHint {
+    if (notes.isNotEmpty) {
+      return notes.first;
+    }
+    if (warnings.isNotEmpty) {
+      return warnings.first;
+    }
+    return qualitySummary;
+  }
+
+  String get evaluationModeLabel {
+    if (usesTechnicalScoreAsFinal) {
+      return '현재는 온디바이스 품질 평가를 중심으로 요약해요.';
+    }
+    return '품질과 미적 선호를 함께 반영한 요약 결과예요.';
+  }
+
   VerdictLevel get verdictLevel {
-    if (finalScore >= 0.72) return VerdictLevel.good;
-    if (finalScore >= 0.45) return VerdictLevel.average;
-    return VerdictLevel.poor;
+    if (finalScore >= 0.85) return VerdictLevel.excellent;
+    if (finalScore >= 0.70) return VerdictLevel.good;
+    if (finalScore >= 0.50) return VerdictLevel.average;
+    return VerdictLevel.needsWork;
   }
 
   static String _verdictFor(double score) {
-    if (score >= 0.72) return '좋음';
-    if (score >= 0.45) return '보통';
+    if (score >= 0.85) return '매우 좋음';
+    if (score >= 0.70) return '좋음';
+    if (score >= 0.50) return '보통';
     return '아쉬움';
   }
 }
 
-enum VerdictLevel { good, average, poor }
+enum VerdictLevel { excellent, good, average, needsWork }

@@ -98,8 +98,11 @@ class _SinglePhotoEvalScreenState extends State<SinglePhotoEvalScreen> {
               child: _loading
                   ? _LoadingView(fileName: widget.fileName)
                   : _errorMessage != null
-                  ? _ErrorView(message: _errorMessage!, onRetry: _evaluate)
-                  : _ResultView(imageBytes: widget.imageBytes, result: _result!),
+                      ? _ErrorView(message: _errorMessage!, onRetry: _evaluate)
+                      : _ResultView(
+                          imageBytes: widget.imageBytes,
+                          result: _result!,
+                        ),
             ),
           ],
         ),
@@ -124,7 +127,7 @@ class _LoadingView extends StatelessWidget {
             color: AppColors.primaryText,
           ),
           const SizedBox(height: 20),
-          Text('분석 중...', style: AppTextStyles.title16),
+          Text('사진을 평가하는 중이에요', style: AppTextStyles.title16),
           if (fileName != null) ...[
             const SizedBox(height: 6),
             Text(fileName!, style: AppTextStyles.body13),
@@ -155,7 +158,7 @@ class _ErrorView extends StatelessWidget {
               color: AppColors.secondaryText,
             ),
             const SizedBox(height: 14),
-            Text('평가 실패', style: AppTextStyles.title16),
+            Text('평가를 완료하지 못했어요', style: AppTextStyles.title16),
             const SizedBox(height: 8),
             Text(
               message,
@@ -205,52 +208,13 @@ class _ResultView extends StatelessWidget {
           const SizedBox(height: 18),
           _HeadlineCard(result: result),
           const SizedBox(height: 12),
-          _ScoreCard(
-            icon: Icons.stars_rounded,
-            accent: const Color(0xFF0F172A),
-            title: '종합 점수',
-            subtitle: 'Final',
-            score: result.finalPct,
-            description: result.usesTechnicalScoreAsFinal
-                ? '현재는 KonIQ + FLIVE-image의 기술 점수를 종합 점수로 사용합니다.'
-                : '기술 점수와 미적 점수를 함께 반영한 최종 점수입니다.',
-          ),
-          const SizedBox(height: 12),
-          _ScoreCard(
-            icon: Icons.tune_rounded,
-            accent: const Color(0xFF2563EB),
-            title: '기술 점수',
-            subtitle: 'Technical',
-            score: result.technicalPct,
-            description: '노출, 선예도, 노이즈 가능성을 종합한 온디바이스 품질 점수입니다.',
-          ),
-          if (result.aestheticPct != null) ...[
-            const SizedBox(height: 12),
-            _ScoreCard(
-              icon: Icons.auto_awesome_rounded,
-              accent: const Color(0xFF7C3AED),
-              title: '미적 점수',
-              subtitle: 'Aesthetic',
-              score: result.aestheticPct!,
-              description: 'AADB 또는 NIMA 계열 모델이 산출한 미적 선호도 점수입니다.',
-            ),
-          ],
-          if (result.usesTechnicalScoreAsFinal) ...[
-            const SizedBox(height: 12),
-            const _InfoBanner(
-              text: '현재는 metadata.json에 정의된 KonIQ/FLIVE-image 입력·출력 규칙을 따라 계산한 기술 점수를 종합 점수로 사용합니다.',
-            ),
-          ],
-          if (result.scoreDetails.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _ModelDetailSection(details: result.scoreDetails.toList()),
-          ],
+          _MetricOverviewSection(result: result),
           if (result.notes.isNotEmpty) ...[
             const SizedBox(height: 16),
             _ChipSection(
               icon: Icons.check_circle_rounded,
               color: const Color(0xFF16A34A),
-              title: '강점',
+              title: '좋았던 포인트',
               chips: result.notes,
             ),
           ],
@@ -259,14 +223,24 @@ class _ResultView extends StatelessWidget {
             _ChipSection(
               icon: Icons.warning_amber_rounded,
               color: const Color(0xFFF59E0B),
-              title: '보완할 점',
+              title: '다음 컷에서 보완하기',
               chips: result.warnings,
             ),
+          ],
+          if (result.usesTechnicalScoreAsFinal) ...[
+            const SizedBox(height: 12),
+            const _InfoBanner(
+              text: '현재 단일 사진 평가는 온디바이스 품질 결과를 중심으로 간단히 요약해 보여줘요.',
+            ),
+          ],
+          if (result.scoreDetails.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _AdvancedDetailSection(details: result.scoreDetails.toList()),
           ],
           if (result.modelVersion != null) ...[
             const SizedBox(height: 18),
             Text(
-              '모델 조합: ${result.modelVersion}',
+              '결과 소스: ${result.modelVersion}',
               style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -294,41 +268,226 @@ class _HeadlineCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         boxShadow: AppShadows.card,
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEEF2FF),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Text(
+                        '단일 사진 평가',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF4338CA),
+                        ),
+                      ),
+                    ),
+                    if (result.fileName != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        result.fileName!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.body13,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              _VerdictBadge(level: result.verdictLevel, label: result.verdict),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            result.verdict,
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w900,
+              color: AppColors.primaryText,
+              height: 1.1,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '종합 ${result.finalPct}점',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primaryText,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            result.primaryHint,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primaryText,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            result.evaluationModeLabel,
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+              color: AppColors.secondaryText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricOverviewSection extends StatelessWidget {
+  final PhotoEvaluationResult result;
+
+  const _MetricOverviewSection({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = <_MetricInfo>[
+      _MetricInfo(
+        label: '종합',
+        value: result.finalPct,
+        caption: '대표 요약 점수',
+        accent: const Color(0xFF0F172A),
+      ),
+      _MetricInfo(
+        label: '기술',
+        value: result.technicalPct,
+        caption: '선명도, 노출, 노이즈',
+        accent: const Color(0xFF2563EB),
+      ),
+      if (result.aestheticPct != null)
+        _MetricInfo(
+          label: '미적',
+          value: result.aestheticPct!,
+          caption: '선호도 기반 보조 요약',
+          accent: const Color(0xFF7C3AED),
+        ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = (constraints.maxWidth - 12) / 2;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: metrics
+              .map(
+                (metric) => SizedBox(
+                  width: width,
+                  child: _MetricCard(info: metric),
+                ),
+              )
+              .toList(),
+        );
+      },
+    );
+  }
+}
+
+class _MetricInfo {
+  final String label;
+  final int value;
+  final String caption;
+  final Color accent;
+
+  const _MetricInfo({
+    required this.label,
+    required this.value,
+    required this.caption,
+    required this.accent,
+  });
+}
+
+class _MetricCard extends StatelessWidget {
+  final _MetricInfo info;
+
+  const _MetricCard({required this.info});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: AppShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            info.label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.secondaryText,
+            ),
+          ),
+          const SizedBox(height: 8),
+          RichText(
+            text: TextSpan(
               children: [
-                if (result.fileName != null)
-                  Text(
-                    result.fileName!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.body13,
-                  ),
-                const SizedBox(height: 6),
-                Text(
-                  '최종 점수 ${result.finalPct}점',
-                  style: const TextStyle(
+                TextSpan(
+                  text: '${info.value}',
+                  style: TextStyle(
                     fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primaryText,
+                    fontWeight: FontWeight.w900,
+                    color: info.accent,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  result.usesTechnicalScoreAsFinal
-                      ? '현재 데모는 KonIQ 60% + FLIVE-image 40% 조합으로 평가합니다.'
-                      : '온디바이스 모델 조합으로 사진 품질을 종합 평가했습니다.',
-                  style: AppTextStyles.body13,
+                const TextSpan(
+                  text: ' /100',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.secondaryText,
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          _VerdictBadge(level: result.verdictLevel, label: result.verdict),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              minHeight: 7,
+              value: info.value / 100,
+              backgroundColor: AppColors.track,
+              valueColor: AlwaysStoppedAnimation<Color>(info.accent),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            info.caption,
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              fontWeight: FontWeight.w600,
+              color: AppColors.secondaryText,
+            ),
+          ),
         ],
       ),
     );
@@ -353,7 +512,11 @@ class _InfoBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFF475569)),
+          const Icon(
+            Icons.info_outline_rounded,
+            size: 18,
+            color: Color(0xFF475569),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -372,39 +535,42 @@ class _InfoBanner extends StatelessWidget {
   }
 }
 
-class _ModelDetailSection extends StatelessWidget {
+class _AdvancedDetailSection extends StatelessWidget {
   final List<ModelScoreDetail> details;
 
-  const _ModelDetailSection({required this.details});
+  const _AdvancedDetailSection({required this.details});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         boxShadow: AppShadows.card,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '모델별 점수',
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          title: const Text(
+            '세부 모델 점수',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,
               color: AppColors.primaryText,
             ),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            '각 모델의 정규화 점수와 반영 비율입니다.',
-            style: AppTextStyles.body13,
+          subtitle: const Text(
+            '필요할 때 펼쳐서 확인하기',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.secondaryText,
+            ),
           ),
-          const SizedBox(height: 14),
-          ...details.map((detail) => _ModelDetailTile(detail: detail)),
-        ],
+          children: details.map((detail) => _ModelDetailTile(detail: detail)).toList(),
+        ),
       ),
     );
   }
@@ -427,7 +593,7 @@ class _ModelDetailTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(top: 10),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -437,8 +603,8 @@ class _ModelDetailTile extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 40,
-              height: 40,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
                 color: _accent.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
@@ -475,15 +641,15 @@ class _ModelDetailTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${detail.normalizedPct}',
+                  '${detail.normalizedPct}점',
                   style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
                     color: _accent,
                   ),
                 ),
                 Text(
-                  'w ${(detail.weight * 100).round()}%',
+                  '가중치 ${(detail.weight * 100).round()}%',
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
@@ -507,22 +673,26 @@ class _VerdictBadge extends StatelessWidget {
 
   Color get _bg {
     switch (level) {
-      case VerdictLevel.good:
+      case VerdictLevel.excellent:
         return const Color(0xFFDCFCE7);
+      case VerdictLevel.good:
+        return const Color(0xFFDBEAFE);
       case VerdictLevel.average:
         return const Color(0xFFFEF3C7);
-      case VerdictLevel.poor:
+      case VerdictLevel.needsWork:
         return const Color(0xFFFEE2E2);
     }
   }
 
   Color get _fg {
     switch (level) {
-      case VerdictLevel.good:
+      case VerdictLevel.excellent:
         return const Color(0xFF15803D);
+      case VerdictLevel.good:
+        return const Color(0xFF1D4ED8);
       case VerdictLevel.average:
         return const Color(0xFFB45309);
-      case VerdictLevel.poor:
+      case VerdictLevel.needsWork:
         return const Color(0xFFDC2626);
     }
   }
@@ -542,128 +712,6 @@ class _VerdictBadge extends StatelessWidget {
           fontWeight: FontWeight.w800,
           color: _fg,
         ),
-      ),
-    );
-  }
-}
-
-class _ScoreCard extends StatelessWidget {
-  final IconData icon;
-  final Color accent;
-  final String title;
-  final String subtitle;
-  final int score;
-  final String description;
-
-  const _ScoreCard({
-    required this.icon,
-    required this.accent,
-    required this.title,
-    required this.subtitle,
-    required this.score,
-    required this.description,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: AppShadows.card,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 18, color: accent),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primaryText,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.secondaryText,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: RichText(
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '$score',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: accent,
-                        ),
-                      ),
-                      const TextSpan(
-                        text: '/100',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.secondaryText,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              minHeight: 8,
-              value: score / 100,
-              backgroundColor: AppColors.track,
-              valueColor: AlwaysStoppedAnimation<Color>(accent),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            description,
-            style: const TextStyle(
-              fontSize: 13,
-              height: 1.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.secondaryText,
-            ),
-          ),
-        ],
       ),
     );
   }

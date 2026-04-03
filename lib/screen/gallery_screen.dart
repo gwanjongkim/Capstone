@@ -183,10 +183,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Future<void> _openACutResultScreen() async {
-    if (_selectedAssetsById.isEmpty) {
+    if (_selectedAssetsById.length < 2) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('먼저 사진을 1장 이상 선택해 주세요.')));
+      ).showSnackBar(
+        const SnackBar(
+          content: Text('A컷 랭킹은 사진을 2장 이상 선택했을 때 시작할 수 있어요.'),
+        ),
+      );
       return;
     }
 
@@ -291,6 +295,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       _photoTypeMode = mode;
                     });
                   },
+                ),
+              ),
+            if (_granted && _albums.isNotEmpty) const SizedBox(height: 10),
+            if (_granted && _albums.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: _FlowGuideBanner(
+                  selectedCount: _selectedAssetsById.length,
                 ),
               ),
             if (_granted && _albums.isNotEmpty) const SizedBox(height: 10),
@@ -416,6 +428,53 @@ class _PhotoTypeSelector extends StatelessWidget {
   }
 }
 
+class _FlowGuideBanner extends StatelessWidget {
+  final int selectedCount;
+
+  const _FlowGuideBanner({required this.selectedCount});
+
+  @override
+  Widget build(BuildContext context) {
+    final description = switch (selectedCount) {
+      0 => '1장 선택 시 사진 평가, 2장 이상 선택 시 A컷 랭킹으로 연결돼요.',
+      1 => '현재는 단일 사진 평가에 적합해요. 한 장 더 선택하면 A컷 랭킹을 시작할 수 있어요.',
+      _ => '현재는 A컷 랭킹 모드예요. BEST, Top 3, 추천 컷 중심으로 결과를 보여줘요.',
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppShadows.card,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.tips_and_updates_outlined,
+            size: 18,
+            color: AppColors.primaryText,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              description,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.secondaryText,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SelectionActionBar extends StatelessWidget {
   final int selectedCount;
   final VoidCallback? onClear;
@@ -431,6 +490,19 @@ class _SelectionActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canEvaluateSingle = selectedCount == 1;
+    final canAnalyze = selectedCount >= 2;
+    final title = switch (selectedCount) {
+      0 => '사진을 선택해 주세요',
+      1 => '이 사진을 바로 평가할 수 있어요',
+      _ => '$selectedCount장 선택됨',
+    };
+    final subtitle = switch (selectedCount) {
+      0 => '한 장은 단일 평가, 두 장 이상은 A컷 랭킹으로 이어집니다.',
+      1 => '여러 장을 비교하려면 사진을 한 장 더 선택해 주세요.',
+      _ => '이제 BEST, Top 3, 추천 컷 중심의 A컷 랭킹을 볼 수 있어요.',
+    };
+
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
       decoration: const BoxDecoration(
@@ -443,13 +515,27 @@ class _SelectionActionBar extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  '선택됨 $selectedCount장',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primaryText,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primaryText,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.secondaryText,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (onClear != null)
@@ -457,52 +543,46 @@ class _SelectionActionBar extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              if (selectedCount == 1) ...[
-                Expanded(
-                  child: SizedBox(
-                    height: 42,
-                    child: OutlinedButton(
-                      onPressed: onEvaluateSingle,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primaryText,
-                        side: const BorderSide(color: AppColors.border),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text(
-                        '사진 평가',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
+          if (canEvaluateSingle)
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: ElevatedButton(
+                onPressed: onEvaluateSingle,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.buttonDark,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: SizedBox(
-                  height: 42,
-                  child: ElevatedButton(
-                    onPressed: onAnalyze,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.buttonDark,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'A컷 분석',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
+                child: const Text(
+                  '이 사진 평가하기',
+                  style: TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
-            ],
-          ),
+            ),
+          if (canAnalyze)
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: ElevatedButton(
+                onPressed: onAnalyze,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.buttonDark,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'A컷 랭킹 보기',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
         ],
       ),
     );

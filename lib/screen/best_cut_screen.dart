@@ -21,23 +21,32 @@ class BestCutScreen extends StatelessWidget {
           children: [
             AppTopBar(title: '베스트 컷', onBack: onBack),
             const SizedBox(height: 22),
-            const Text('여러 장 중 가장 좋은 컷을 빠르게 고르세요', style: AppTextStyles.title20),
+            const Text(
+              '실시간 구도 코칭은 그대로, 촬영 후에는 베스트 컷 추천까지',
+              style: AppTextStyles.title20,
+            ),
             const SizedBox(height: 6),
             const Text(
-              '현재 데모는 KonIQ와 FLIVE-image를 온디바이스에서 실행해 사진을 정렬하고, 베스트 샷과 A컷 후보를 바로 보여줍니다.',
+              '이 화면은 점수 자체보다 어떤 사진을 먼저 고를지 보여주는 데 집중합니다. 한 장은 간단 평가, 여러 장은 A컷 랭킹으로 이어져요.',
               style: AppTextStyles.body13,
             ),
             const SizedBox(height: 18),
             const _FeatureCard(
-              title: 'A컷 랭킹',
-              subtitle: '여러 장 선택 -> 자동 순위화 -> 베스트 샷 강조',
+              title: '여러 장 A컷 랭킹',
+              subtitle: 'BEST, Top 3, 추천 컷 중심으로 빠르게 비교',
               icon: Icons.content_cut_rounded,
             ),
             const SizedBox(height: 12),
             const _FeatureCard(
-              title: '단일 사진 평가',
-              subtitle: '촬영 직후 또는 갤러리 1장 선택 후 바로 점수 확인',
+              title: '한 장 빠른 평가',
+              subtitle: '촬영 직후 또는 갤러리 1장 선택 후 바로 확인',
               icon: Icons.auto_awesome_rounded,
+            ),
+            const SizedBox(height: 12),
+            const _FeatureCard(
+              title: '카메라 코칭 유지',
+              subtitle: '실시간 구도 가이드는 기존 카메라 흐름 그대로 사용',
+              icon: Icons.camera_alt_outlined,
             ),
             const SizedBox(height: 18),
             SizedBox(
@@ -55,11 +64,8 @@ class BestCutScreen extends StatelessWidget {
                 onPressed: () => onMoveTab(1),
                 icon: const Icon(Icons.photo_library_outlined),
                 label: const Text(
-                  '갤러리에서 A컷 고르기',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  '갤러리에서 여러 장 랭킹하기',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -78,11 +84,8 @@ class BestCutScreen extends StatelessWidget {
                 onPressed: () => onMoveTab(2),
                 icon: const Icon(Icons.camera_alt_outlined),
                 label: const Text(
-                  '촬영 후 바로 평가하기',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  '카메라에서 한 장 평가하기',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -99,7 +102,7 @@ class BestCutScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '현재 추천 흐름',
+                    '추천 흐름',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
@@ -109,17 +112,17 @@ class BestCutScreen extends StatelessWidget {
                   SizedBox(height: 10),
                   _StepRow(
                     index: 1,
-                    text: '카메라에서 촬영하면 저장 직후 “사진 평가하기”로 이동할 수 있습니다.',
+                    text: '카메라에서 촬영하면 저장 직후 “이 사진 평가하기”로 단일 사진 평가를 시작할 수 있습니다.',
                   ),
                   SizedBox(height: 8),
                   _StepRow(
                     index: 2,
-                    text: '갤러리에서 1장을 선택하면 단일 평가, 여러 장을 선택하면 A컷 분석이 가능합니다.',
+                    text: '갤러리에서 1장을 선택하면 단일 평가, 2장 이상 선택하면 A컷 랭킹으로 연결됩니다.',
                   ),
                   SizedBox(height: 8),
                   _StepRow(
                     index: 3,
-                    text: 'A컷 결과 화면에서는 BEST SHOT 강조와 상세 점수 확인이 가능합니다.',
+                    text: 'A컷 결과 화면에서는 BEST 1장, Top 3, 추천 컷 순서를 우선적으로 보여줍니다.',
                   ),
                 ],
               ),

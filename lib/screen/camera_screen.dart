@@ -796,7 +796,7 @@ class _PostCaptureSheet extends StatelessWidget {
             ),
           ),
           const Text(
-            '사진이 저장되었습니다',
+            '이 사진을 바로 평가할까요?',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,
@@ -805,7 +805,7 @@ class _PostCaptureSheet extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'AI가 이 사진의 미적 품질을 평가해드릴 수 있어요.',
+            '한 장 평가는 지금 바로, 여러 장 비교는 갤러리의 A컷 랭킹에서 이어서 볼 수 있어요.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
@@ -830,7 +830,7 @@ class _PostCaptureSheet extends StatelessWidget {
               ),
               icon: const Icon(Icons.auto_awesome_rounded, size: 18),
               label: const Text(
-                '사진 평가하기',
+                '이 사진 평가하기',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
               ),
             ),

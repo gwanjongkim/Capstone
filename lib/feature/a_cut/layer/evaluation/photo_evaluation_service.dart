@@ -90,11 +90,11 @@ class OnDevicePhotoEvaluationService implements PhotoEvaluationService {
     }
 
     if (koniq != null && koniq.normalizedScore >= 0.72) {
-      notes.add('KonIQ 기준 디테일 보존 상태가 좋습니다.');
+      notes.add('디테일 보존 상태가 좋습니다.');
     }
 
     if (flive != null && flive.normalizedScore >= 0.72) {
-      notes.add('FLIVE-image 기준 흐림과 노이즈 위험이 낮습니다.');
+      notes.add('흐림과 노이즈 위험이 낮습니다.');
     }
 
     if (summary.aestheticScore != null && summary.aestheticScore! >= 0.70) {
@@ -116,11 +116,11 @@ class OnDevicePhotoEvaluationService implements PhotoEvaluationService {
     }
 
     if (koniq != null && koniq.normalizedScore < 0.45) {
-      warnings.add('KonIQ 점수가 낮아 디테일 손실이 있을 수 있습니다.');
+      warnings.add('디테일 손실이 있을 수 있습니다.');
     }
 
     if (flive != null && flive.normalizedScore < 0.45) {
-      warnings.add('FLIVE-image 점수가 낮아 노이즈나 블러 영향이 있을 수 있습니다.');
+      warnings.add('노이즈나 블러 영향이 있을 수 있습니다.');
     }
 
     warnings.addAll(summary.warnings);
