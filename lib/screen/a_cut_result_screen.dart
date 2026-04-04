@@ -3,17 +3,15 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 
-import '../feature/a_cut/layer/evaluation/photo_evaluation_service.dart';
-import '../feature/a_cut/layer/scoring/image_scoring_service.dart';
-import '../feature/a_cut/model/multi_photo_ranking_result.dart';
-import '../feature/a_cut/model/photo_evaluation_result.dart';
+import '../feature/a_cut/a_cut_controller.dart';
 import '../feature/a_cut/model/photo_type_mode.dart';
-import '../feature/a_cut/model/scored_photo_result.dart';
+import '../models/acut_result.dart';
+import '../models/acut_result_item.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_shadows.dart';
 import '../theme/app_text_styles.dart';
 import '../widget/app_top_bar.dart';
-import 'single_photo_eval_screen.dart';
+import 'a_cut_result_detail_screen.dart';
 
 class ACutResultScreen extends StatefulWidget {
   final List<AssetEntity> selectedAssets;
@@ -30,269 +28,205 @@ class ACutResultScreen extends StatefulWidget {
 }
 
 class _ACutResultScreenState extends State<ACutResultScreen> {
-  static const double _defaultTopPercent = 0.2;
+  static const int _defaultTopK = 5;
 
-  final ImageScoreService _scoreService = OnDeviceImageScoreService();
-
-  MultiPhotoRankingResult _ranking = const MultiPhotoRankingResult.empty();
-  PhotoTypeMode _photoTypeMode = PhotoTypeMode.auto;
-
-  bool _isScoring = false;
-  int _doneCount = 0;
-  int _totalCount = 0;
-  int _jobToken = 0;
+  final AcutController _controller = AcutController();
+  late PhotoTypeMode _photoTypeMode;
 
   @override
   void initState() {
     super.initState();
     _photoTypeMode = widget.initialPhotoTypeMode;
-    _startScoring();
+    _startAnalysis();
   }
 
-  Future<void> _startScoring() async {
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startAnalysis() {
     if (widget.selectedAssets.isEmpty) {
-      setState(() {
-        _isScoring = false;
-        _ranking = const MultiPhotoRankingResult.empty();
-        _doneCount = 0;
-        _totalCount = 0;
-      });
-      return;
+      return Future<void>.value();
     }
-
-    final currentToken = ++_jobToken;
-
-    setState(() {
-      _isScoring = true;
-      _doneCount = 0;
-      _totalCount = widget.selectedAssets.length;
-      _ranking = const MultiPhotoRankingResult.empty();
-    });
-
-    await _scoreService.scoreAssets(
+    return _controller.startAnalysis(
       assets: widget.selectedAssets,
       photoTypeMode: _photoTypeMode,
-      topPercent: _defaultTopPercent,
-      onProgress: (snapshot, done, total) {
-        if (!mounted || currentToken != _jobToken) {
-          return;
-        }
-        setState(() {
-          _ranking = snapshot;
-          _doneCount = done;
-          _totalCount = total;
-          _isScoring = done < total;
-        });
-      },
-    );
-
-    if (!mounted || currentToken != _jobToken) {
-      return;
-    }
-
-    setState(() {
-      _isScoring = false;
-    });
-  }
-
-  Future<void> _openDetail(
-    BuildContext context,
-    ScoredPhotoResult scored,
-  ) async {
-    if (scored.evaluation == null) return;
-
-    final bytes = await scored.asset.originBytes;
-    if (bytes == null || !context.mounted) return;
-
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => SinglePhotoEvalScreen(
-          imageBytes: bytes,
-          fileName: scored.fileName,
-          evaluationService: _PrecomputedEvalService(scored.evaluation!),
-        ),
-      ),
+      topK: _defaultTopK,
+      enableDiversity: false,
     );
   }
 
   void _changeType(PhotoTypeMode mode) {
-    if (_photoTypeMode == mode || _isScoring) {
+    if (_photoTypeMode == mode || _controller.isBusy) {
       return;
     }
     setState(() {
       _photoTypeMode = mode;
     });
-    _startScoring();
+    _startAnalysis();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final completed = _totalCount > 0
-        ? (_doneCount / _totalCount).clamp(0.0, 1.0).toDouble()
-        : 0.0;
-    final showInitialLoading =
-        _ranking.items.isEmpty && _isScoring && widget.selectedAssets.isNotEmpty;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F7),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-              child: AppTopBar(
-                title: 'A컷 추천',
-                onBack: () => Navigator.of(context).pop(),
-                trailingWidth: 90,
-                trailing: GestureDetector(
-                  onTap: _isScoring ? null : _startScoring,
-                  child: Text(
-                    '재분석',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: _isScoring
-                          ? AppColors.lightText
-                          : AppColors.primaryText,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            _PhotoTypeRow(selected: _photoTypeMode, onSelected: _changeType),
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        '분석 진행: $_doneCount/$_totalCount',
-                        style: AppTextStyles.body13,
-                      ),
-                      const Spacer(),
-                      Text(
-                        '${(completed * 100).toStringAsFixed(0)}%',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primaryText,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: LinearProgressIndicator(
-                      minHeight: 8,
-                      value: completed,
-                      backgroundColor: AppColors.track,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        AppColors.primaryText,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            Expanded(
-              child: widget.selectedAssets.isEmpty
-                  ? const _RankingStateCard(
-                      icon: Icons.photo_library_outlined,
-                      title: '선택된 사진이 없어요',
-                      description: '갤러리에서 사진을 2장 이상 선택하면 A컷 랭킹을 볼 수 있어요.',
-                    )
-                  : showInitialLoading
-                      ? const _RankingStateCard(
-                          icon: Icons.auto_awesome_rounded,
-                          title: '추천 순위를 준비하는 중이에요',
-                          description: 'BEST와 Top 3를 먼저 보여드릴 수 있도록 사진을 순위 중심으로 정리하고 있어요.',
-                          loading: true,
-                        )
-                      : _ranking.items.isEmpty
-                          ? const _RankingStateCard(
-                              icon: Icons.content_cut_rounded,
-                              title: '표시할 랭킹이 아직 없어요',
-                              description: '다시 시도하면 A컷 추천 결과를 만들 수 있어요.',
-                            )
-                          : ListView(
-                              padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
-                              children: [
-                                _SummaryHeader(
-                                  ranking: _ranking,
-                                  totalSelected: widget.selectedAssets.length,
-                                  photoTypeMode: _photoTypeMode,
-                                ),
-                                if (_ranking.bestShot != null) ...[
-                                  const SizedBox(height: 14),
-                                  _BestShotHighlight(
-                                    result: _ranking.bestShot!,
-                                    onTap: () => _openDetail(
-                                      context,
-                                      _ranking.bestShot!,
-                                    ),
-                                  ),
-                                ],
-                                if (_ranking.topPicks.isNotEmpty) ...[
-                                  const SizedBox(height: 18),
-                                  _TopPickSection(
-                                    picks: _ranking.topPicks,
-                                    onTap: (result) => _openDetail(context, result),
-                                  ),
-                                ],
-                                if (_ranking.failureCount > 0 ||
-                                    _ranking.pendingCount > 0) ...[
-                                  const SizedBox(height: 18),
-                                  _RankingNoticeCard(ranking: _ranking),
-                                ],
-                                const SizedBox(height: 18),
-                                const Text(
-                                  '전체 순위',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.primaryText,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                ..._ranking.items.map(
-                                  (result) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: GestureDetector(
-                                      onTap: result.status == ScoreStatus.success
-                                          ? () => _openDetail(context, result)
-                                          : null,
-                                      child: _ResultCard(result: result),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-            ),
-          ],
+  void _openDetail(AcutResultItem item) {
+    final result = _controller.result;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AcutResultDetailScreen(
+          item: item,
+          asset: _controller.assetForItem(item),
+          generatedAt: result?.generatedAt,
+          rankingStage: result?.rankingStage,
+          scoreSemantics: result?.scoreSemantics,
         ),
       ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final result = _controller.result;
+        return Scaffold(
+          backgroundColor: const Color(0xFFF7F7F7),
+          body: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+                  child: AppTopBar(
+                    title: 'A컷 분석',
+                    onBack: () => Navigator.of(context).pop(),
+                    trailingWidth: 90,
+                    trailing: GestureDetector(
+                      onTap: _controller.isBusy ? null : () { _startAnalysis(); },
+                      child: Text(
+                        '재분석',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: _controller.isBusy
+                              ? AppColors.lightText
+                              : AppColors.primaryText,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _PhotoTypeRow(
+                  selected: _photoTypeMode,
+                  enabled: !_controller.isBusy,
+                  onSelected: _changeType,
+                ),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: _StatusBanner(
+                    controller: _controller,
+                    selectedCount: widget.selectedAssets.length,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: _buildBody(result),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBody(AcutResult? result) {
+    if (widget.selectedAssets.isEmpty) {
+      return const _StateCard(
+        icon: Icons.photo_library_outlined,
+        title: '선택된 사진이 없어요',
+        description: '갤러리에서 사진을 2장 이상 선택하면 A컷 분석을 시작할 수 있어요.',
+      );
+    }
+
+    if (result == null) {
+      if (_controller.status == AcutControllerStatus.error) {
+        return _StateCard(
+          icon: Icons.error_outline_rounded,
+          title: '분석을 완료하지 못했어요',
+          description: _controller.errorMessage ?? 'Firebase 작업을 다시 시작해 주세요.',
+          actionLabel: '다시 시도',
+          onAction: () { _startAnalysis(); },
+        );
+      }
+
+      return _StateCard(
+        icon: Icons.auto_awesome_rounded,
+        title: _controller.statusLabel,
+        description: _controller.statusDescription,
+        loading: true,
+      );
+    }
+
+    final selectedItems = result.selectedItems;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 28),
+      children: [
+        _ResultSummaryCard(result: result),
+        const SizedBox(height: 14),
+        _MetadataCard(result: result),
+        if (selectedItems.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          const _SectionHeader(
+            title: '선택된 컷',
+            subtitle: '앱에서 바로 보여줄 최종 A컷 결과예요.',
+          ),
+          const SizedBox(height: 10),
+          ...selectedItems.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _ResultCard(
+                item: item,
+                asset: _controller.assetForItem(item),
+                onTap: () => _openDetail(item),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
+        const _SectionHeader(
+          title: '전체 결과',
+          subtitle: '순위와 짧은 이유를 함께 확인할 수 있어요.',
+        ),
+        const SizedBox(height: 10),
+        ...result.items.map(
+          (item) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _ResultCard(
+              item: item,
+              asset: _controller.assetForItem(item),
+              onTap: () => _openDetail(item),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
-class _SummaryHeader extends StatelessWidget {
-  final MultiPhotoRankingResult ranking;
-  final int totalSelected;
-  final PhotoTypeMode photoTypeMode;
+class _StatusBanner extends StatelessWidget {
+  final AcutController controller;
+  final int selectedCount;
 
-  const _SummaryHeader({
-    required this.ranking,
-    required this.totalSelected,
-    required this.photoTypeMode,
+  const _StatusBanner({
+    required this.controller,
+    required this.selectedCount,
   });
 
   @override
   Widget build(BuildContext context) {
+    final progress = _progressValue(controller);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -307,253 +241,206 @@ class _SummaryHeader extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  ranking.displayTitle,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                  controller.statusLabel,
+                  style: AppTextStyles.title16,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '$selectedCount장',
+                  style: AppTextStyles.caption12.copyWith(
                     color: AppColors.primaryText,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-              _ModeBadge(label: photoTypeMode.label),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            ranking.displaySummary,
-            style: const TextStyle(
-              fontSize: 13,
-              height: 1.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.secondaryText,
+          const SizedBox(height: 8),
+          Text(controller.statusDescription, style: AppTextStyles.body13),
+          if (controller.job != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Job ID: ${controller.job!.id}',
+              style: AppTextStyles.caption12,
             ),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _SummaryStatChip(
-                label: 'BEST',
-                value: ranking.bestShot == null ? '-' : '#1',
-              ),
-              _SummaryStatChip(
-                label: 'Top 3',
-                value: '${ranking.topPicks.length}장',
-              ),
-              _SummaryStatChip(
-                label: '추천 컷',
-                value: '${ranking.recommendedPicks.length}장',
-              ),
-              _SummaryStatChip(
-                label: '분석 완료',
-                value: '${ranking.successCount}/$totalSelected',
-              ),
-            ],
-          ),
+          ],
           const SizedBox(height: 12),
-          Text(
-            ranking.displaySource,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.lightText,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              minHeight: 8,
+              value: progress,
+              backgroundColor: AppColors.track,
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                AppColors.primaryText,
+              ),
             ),
           ),
         ],
       ),
     );
   }
+
+  double? _progressValue(AcutController controller) {
+    switch (controller.status) {
+      case AcutControllerStatus.idle:
+        return 0.0;
+      case AcutControllerStatus.uploading:
+        return controller.uploadProgress.clamp(0.0, 1.0).toDouble();
+      case AcutControllerStatus.queued:
+        return 0.35;
+      case AcutControllerStatus.running:
+        return 0.72;
+      case AcutControllerStatus.done:
+        return 1.0;
+      case AcutControllerStatus.error:
+        return 1.0;
+    }
+  }
 }
 
-class _SummaryStatChip extends StatelessWidget {
-  final String label;
-  final String value;
+class _ResultSummaryCard extends StatelessWidget {
+  final AcutResult result;
 
-  const _SummaryStatChip({
-    required this.label,
-    required this.value,
-  });
+  const _ResultSummaryCard({required this.result});
 
   @override
   Widget build(BuildContext context) {
+    final bestItem = result.bestItem;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: AppShadows.card,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.secondaryText,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-              color: AppColors.primaryText,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BestShotHighlight extends StatelessWidget {
-  final ScoredPhotoResult result;
-  final VoidCallback onTap;
-
-  const _BestShotHighlight({
-    required this.result,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final evaluation = result.evaluation!;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: const Color(0xFFFACC15), width: 1.5),
-          boxShadow: AppShadows.card,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-              child: Stack(
-                children: [
-                  AspectRatio(
-                    aspectRatio: 16 / 10,
-                    child: FutureBuilder<Uint8List?>(
-                      future: result.asset.thumbnailDataWithSize(
-                        const ThumbnailSize(720, 720),
-                      ),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData || snapshot.data == null) {
-                          return Container(
-                            color: const Color(0xFFEDEFF3),
-                            child: const Icon(
-                              Icons.broken_image_outlined,
-                              color: AppColors.lightText,
-                              size: 36,
-                            ),
-                          );
-                        }
-                        return Image.memory(snapshot.data!, fit: BoxFit.cover);
-                      },
-                    ),
-                  ),
-                  const Positioned(
-                    left: 16,
-                    top: 16,
-                    child: _HighlightPill(
-                      label: 'BEST PICK',
-                      background: Color(0xFF111827),
-                      foreground: Colors.white,
-                    ),
-                  ),
-                  Positioned(
-                    right: 16,
-                    top: 16,
-                    child: _HighlightPill(
-                      label: result.rankLabel,
-                      background: Colors.white,
-                      foreground: AppColors.primaryText,
-                    ),
-                  ),
-                ],
+          Row(
+            children: [
+              const Icon(
+                Icons.workspace_premium_rounded,
+                color: AppColors.primaryText,
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
+              const SizedBox(width: 8),
+              Text('A컷 분석 완료', style: AppTextStyles.title18),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(result.displaySummary, style: AppTextStyles.body14),
+          if (bestItem != null) ...[
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '가장 먼저 확인할 추천 컷',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFFCA8A04),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
                   Text(
-                    result.fileName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
+                    'BEST #${bestItem.rank}',
+                    style: AppTextStyles.caption12.copyWith(
                       color: AppColors.primaryText,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    evaluation.primaryHint,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      height: 1.5,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.primaryText,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _HighlightPill(
-                        label: '종합 ${evaluation.finalPct}점',
-                        background: const Color(0xFF111827),
-                        foreground: Colors.white,
-                      ),
-                      _HighlightPill(
-                        label: evaluation.verdict,
-                        background: const Color(0xFFF8FAFC),
-                        foreground: AppColors.primaryText,
-                      ),
-                      _HighlightPill(
-                        label: result.recommendationLabel,
-                        background: const Color(0xFFFFF7CC),
-                        foreground: const Color(0xFF92400E),
-                      ),
-                    ],
-                  ),
+                  const SizedBox(height: 6),
+                  Text(bestItem.primaryReason, style: AppTextStyles.body14),
                 ],
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MetadataCard extends StatelessWidget {
+  final AcutResult result;
+
+  const _MetadataCard({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final generatedAt = result.generatedAt;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _MetadataChip(label: result.schemaVersion),
+              const SizedBox(width: 8),
+              _MetadataChip(label: result.rankingStage),
+              const SizedBox(width: 8),
+              _MetadataChip(label: result.diversityEnabled ? 'diversity on' : 'diversity off'),
+            ],
+          ),
+          if (generatedAt != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              '생성 시각: ${generatedAt.toLocal()}',
+              style: AppTextStyles.caption12,
+            ),
+          ],
+          const SizedBox(height: 10),
+          Text(
+            result.scoreSemantics,
+            style: AppTextStyles.body13.copyWith(color: AppColors.primaryText),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetadataChip extends StatelessWidget {
+  final String label;
+
+  const _MetadataChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: AppTextStyles.caption12.copyWith(
+          color: AppColors.primaryText,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
   }
 }
 
-class _TopPickSection extends StatelessWidget {
-  final List<ScoredPhotoResult> picks;
-  final ValueChanged<ScoredPhotoResult> onTap;
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final String subtitle;
 
-  const _TopPickSection({
-    required this.picks,
-    required this.onTap,
+  const _SectionHeader({
+    required this.title,
+    required this.subtitle,
   });
 
   @override
@@ -561,252 +448,191 @@ class _TopPickSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Top 3 추천 컷',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: AppColors.primaryText,
-          ),
-        ),
+        Text(title, style: AppTextStyles.title16),
         const SizedBox(height: 4),
-        const Text(
-          '상위 추천 컷을 먼저 훑어본 뒤 전체 순위를 확인해 보세요.',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.secondaryText,
-          ),
-        ),
-        const SizedBox(height: 12),
-        ...picks.map(
-          (result) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: GestureDetector(
-              onTap: () => onTap(result),
-              child: _ResultCard(result: result, compact: true),
-            ),
-          ),
-        ),
+        Text(subtitle, style: AppTextStyles.body13),
       ],
     );
   }
 }
 
-class _RankingNoticeCard extends StatelessWidget {
-  final MultiPhotoRankingResult ranking;
-
-  const _RankingNoticeCard({required this.ranking});
-
-  @override
-  Widget build(BuildContext context) {
-    final messages = <String>[];
-    if (ranking.pendingCount > 0) {
-      messages.add('아직 분석 중인 사진 ${ranking.pendingCount}장이 있어요.');
-    }
-    if (ranking.failureCount > 0) {
-      messages.add('불러오지 못한 사진 ${ranking.failureCount}장은 순위에서 제외됐어요.');
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: AppShadows.card,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: messages
-            .map(
-              (message) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    height: 1.45,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF475569),
-                  ),
-                ),
-              ),
-            )
-            .toList(),
-      ),
-    );
-  }
-}
-
 class _ResultCard extends StatelessWidget {
-  final ScoredPhotoResult result;
-  final bool compact;
+  final AcutResultItem item;
+  final AssetEntity? asset;
+  final VoidCallback onTap;
 
   const _ResultCard({
-    required this.result,
-    this.compact = false,
+    required this.item,
+    required this.asset,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isSuccess = result.status == ScoreStatus.success;
-    final isFailed = result.status == ScoreStatus.failed;
-    final evaluation = result.evaluation;
-    final thumbSize = compact ? 82.0 : 92.0;
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: result.isRecommendedPick
-              ? const Color(0xFFE2E8F0)
-              : Colors.transparent,
-        ),
-        boxShadow: AppShadows.card,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: SizedBox(
-                  width: thumbSize,
-                  height: thumbSize,
-                  child: FutureBuilder<Uint8List?>(
-                    future: result.asset.thumbnailDataWithSize(
-                      const ThumbnailSize(320, 320),
-                    ),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData || snapshot.data == null) {
-                        return Container(
-                          color: const Color(0xFFEDEFF3),
-                          child: const Icon(
-                            Icons.broken_image_outlined,
-                            color: AppColors.lightText,
-                          ),
-                        );
-                      }
-                      return Image.memory(snapshot.data!, fit: BoxFit.cover);
-                    },
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 8,
-                top: 8,
-                child: _RankBadge(result: result),
-              ),
-            ],
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: AppShadows.card,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        result.fileName,
+                _AssetPreview(asset: asset, fallbackLabel: item.imageFileName),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(item.rankLabel, style: AppTextStyles.title16),
+                          const SizedBox(width: 8),
+                          _ResultBadge(item: item),
+                          const Spacer(),
+                          Text(item.scoreLabel, style: AppTextStyles.caption12),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        item.imageFileName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primaryText,
+                        style: AppTextStyles.caption12.copyWith(
+                          color: AppColors.lightText,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    _HighlightPill(
-                      label: result.highlightLabel,
-                      background: result.isBestShot
-                          ? const Color(0xFF111827)
-                          : const Color(0xFFF1F5F9),
-                      foreground: result.isBestShot
-                          ? Colors.white
-                          : AppColors.primaryText,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  result.recommendationLabel,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primaryText,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                if (isSuccess && evaluation != null) ...[
-                  Text(
-                    evaluation.primaryHint,
-                    maxLines: compact ? 1 : 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      height: 1.45,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.secondaryText,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      _MetaPill(label: result.rankLabel),
-                      _MetaPill(label: evaluation.verdict),
-                      if (result.isACut && !result.isTopThree)
-                        const _MetaPill(label: 'A컷 후보'),
-                      _MetaPill(label: '종합 ${evaluation.finalPct}점'),
+                      const SizedBox(height: 6),
+                      Text(
+                        item.primaryReason,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.body14,
+                      ),
                     ],
                   ),
-                ],
-                if (isFailed)
-                  Text(
-                    '실패: ${result.errorMessage ?? '알 수 없는 오류'}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.redAccent,
-                    ),
-                  ),
-                if (!isSuccess && !isFailed)
-                  const Text(
-                    '추천 순위를 계산 중이에요...',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.secondaryText,
-                    ),
-                  ),
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _RankingStateCard extends StatelessWidget {
+class _ResultBadge extends StatelessWidget {
+  final AcutResultItem item;
+
+  const _ResultBadge({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = item.selected;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: isSelected ? const Color(0xFFE9FFF5) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        item.selectedBadgeLabel,
+        style: AppTextStyles.caption12.copyWith(
+          color: isSelected ? AppColors.pass : AppColors.primaryText,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _AssetPreview extends StatelessWidget {
+  final AssetEntity? asset;
+  final String fallbackLabel;
+
+  const _AssetPreview({
+    required this.asset,
+    required this.fallbackLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholder = _PreviewPlaceholder(label: fallbackLabel);
+    if (asset == null) {
+      return placeholder;
+    }
+
+    return FutureBuilder<Uint8List?>(
+      future: asset!.thumbnailDataWithSize(const ThumbnailSize(240, 240)),
+      builder: (context, snapshot) {
+        final bytes = snapshot.data;
+        if (bytes == null || bytes.isEmpty) {
+          return placeholder;
+        }
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            width: 88,
+            height: 88,
+            child: Image.memory(bytes, fit: BoxFit.cover),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PreviewPlaceholder extends StatelessWidget {
+  final String label;
+
+  const _PreviewPlaceholder({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 88,
+      height: 88,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      alignment: Alignment.center,
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Text(
+          label.isEmpty ? 'IMG' : label,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: AppTextStyles.caption12,
+        ),
+      ),
+    );
+  }
+}
+
+class _StateCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String description;
   final bool loading;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
-  const _RankingStateCard({
+  const _StateCard({
     required this.icon,
     required this.title,
     required this.description,
     this.loading = false,
+    this.actionLabel,
+    this.onAction,
   });
 
   @override
@@ -816,7 +642,7 @@ class _RankingStateCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+          padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(22),
@@ -826,31 +652,39 @@ class _RankingStateCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (loading)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 16),
+                const SizedBox(
+                  width: 28,
+                  height: 28,
                   child: CircularProgressIndicator(
                     strokeWidth: 2.5,
                     color: AppColors.primaryText,
                   ),
                 )
               else
-                Icon(icon, size: 42, color: AppColors.primaryText),
-              if (!loading) const SizedBox(height: 14),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.primaryText,
-                ),
-                textAlign: TextAlign.center,
-              ),
+                Icon(icon, size: 44, color: AppColors.secondaryText),
+              const SizedBox(height: 16),
+              Text(title, style: AppTextStyles.title18, textAlign: TextAlign.center),
               const SizedBox(height: 8),
               Text(
                 description,
-                style: AppTextStyles.body13,
                 textAlign: TextAlign.center,
+                style: AppTextStyles.body13,
               ),
+              if (actionLabel != null && onAction != null) ...[
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: onAction,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.buttonDark,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Text(actionLabel!),
+                ),
+              ],
             ],
           ),
         ),
@@ -859,133 +693,16 @@ class _RankingStateCard extends StatelessWidget {
   }
 }
 
-class _HighlightPill extends StatelessWidget {
-  final String label;
-  final Color background;
-  final Color foreground;
-
-  const _HighlightPill({
-    required this.label,
-    required this.background,
-    required this.foreground,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          color: foreground,
-        ),
-      ),
-    );
-  }
-}
-
-class _MetaPill extends StatelessWidget {
-  final String label;
-
-  const _MetaPill({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: AppColors.secondaryText,
-        ),
-      ),
-    );
-  }
-}
-
-class _RankBadge extends StatelessWidget {
-  final ScoredPhotoResult result;
-
-  const _RankBadge({required this.result});
-
-  Color get _background {
-    if (result.isBestShot) return const Color(0xFF111827);
-    if (result.isTopThree) return const Color(0xFF2563EB);
-    if (result.isACut) return const Color(0xFF0F766E);
-    if (result.status == ScoreStatus.failed) return const Color(0xFFDC2626);
-    if (result.status == ScoreStatus.pending) return const Color(0xFF64748B);
-    return const Color(0xFF334155);
-  }
-
-  String get _label {
-    if (result.isBestShot) return 'BEST';
-    if (result.rank != null) return '${result.rank}위';
-    if (result.status == ScoreStatus.failed) return '실패';
-    return '대기';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: _background,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        _label,
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          color: Colors.white,
-        ),
-      ),
-    );
-  }
-}
-
-class _ModeBadge extends StatelessWidget {
-  final String label;
-
-  const _ModeBadge({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        '$label 모드',
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          color: AppColors.primaryText,
-        ),
-      ),
-    );
-  }
-}
-
 class _PhotoTypeRow extends StatelessWidget {
   final PhotoTypeMode selected;
+  final bool enabled;
   final ValueChanged<PhotoTypeMode> onSelected;
 
-  const _PhotoTypeRow({required this.selected, required this.onSelected});
+  const _PhotoTypeRow({
+    required this.selected,
+    required this.enabled,
+    required this.onSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -993,27 +710,27 @@ class _PhotoTypeRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 18),
       child: Row(
         children: PhotoTypeMode.values.map((mode) {
-          final active = selected == mode;
+          final isSelected = mode == selected;
           return Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(right: 8),
+              padding: EdgeInsets.only(
+                right: mode == PhotoTypeMode.values.last ? 0 : 8,
+              ),
               child: GestureDetector(
-                onTap: () => onSelected(mode),
+                onTap: enabled ? () => onSelected(mode) : null,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
-                  height: 38,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                   decoration: BoxDecoration(
-                    color: active
-                        ? const Color(0xFF3A3A3A)
-                        : const Color(0xFFEFEFEF),
-                    borderRadius: BorderRadius.circular(999),
+                    color: isSelected ? AppColors.primaryText : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: AppShadows.card,
                   ),
                   child: Center(
                     child: Text(
                       mode.label,
-                      style: TextStyle(
-                        color: active ? Colors.white : const Color(0xFF5A5A5A),
-                        fontSize: 12,
+                      style: AppTextStyles.body14.copyWith(
+                        color: isSelected ? Colors.white : AppColors.primaryText,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1022,21 +739,8 @@ class _PhotoTypeRow extends StatelessWidget {
               ),
             ),
           );
-        }).toList(),
+        }).toList(growable: false),
       ),
     );
   }
-}
-
-class _PrecomputedEvalService implements PhotoEvaluationService {
-  final PhotoEvaluationResult _result;
-
-  const _PrecomputedEvalService(this._result);
-
-  @override
-  Future<PhotoEvaluationResult> evaluate(
-    Uint8List imageBytes, {
-    String? fileName,
-  }) async =>
-      _result;
 }
