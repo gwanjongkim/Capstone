@@ -174,6 +174,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.0"
+  flutter_litert:
+    dependency: "direct main"
+    description:
+      name: flutter_litert
+      sha256: e362d56cbc93d53dc66640b278c133bde6c26658404eb9dd49e405e0a6536cf2
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.7"
+  flutter_litert_flex:
+    dependency: "direct main"
+    description:
+      name: flutter_litert_flex
+      sha256: "26381a09bf652378af4168077c676d50234581e32d10fb4e5411ea405eee8140"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.5"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
@@ -448,6 +464,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.5.0"
+  quiver:
+    dependency: transitive
+    description:
+      name: quiver
+      sha256: ea0b925899e64ecdfbf9c7becb60d5b50e706ade44a85b2363be2a22d88117d2
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.2.2"
   sky_engine:
     dependency: transitive
     description: flutter
