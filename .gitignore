@@ -52,3 +52,5 @@ CLAUDE.md
 ./macos/Flutter/GeneratedPluginRegistrant.swift
 ./windows/flutter/generated_plugins.cmake
 .claude
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist

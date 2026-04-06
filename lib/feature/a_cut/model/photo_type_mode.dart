@@ -35,4 +35,15 @@ extension PhotoTypeModeX on PhotoTypeMode {
         return 0.40;
     }
   }
+
+  String get backendValue {
+    switch (this) {
+      case PhotoTypeMode.portrait:
+        return 'portrait';
+      case PhotoTypeMode.snap:
+        return 'snap';
+      case PhotoTypeMode.auto:
+        return 'auto';
+    }
+  }
 }

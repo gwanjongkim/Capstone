@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'app.dart';
+import 'firebase_bootstrap.dart';
+import 'services/firebase_auth_service.dart';
 
 List<CameraDescription> cameras = [];
 
@@ -12,8 +14,17 @@ Future<void> main() async {
   try {
     cameras = await availableCameras();
   } catch (error) {
-    debugPrint('Camera initialization error: $error'); 
+    debugPrint('Camera initialization error: $error');
   }
-  
-  runApp(const PozyApp()); 
+
+  try {
+    await FirebaseBootstrap.initialize();
+    if (FirebaseBootstrap.isInitialized) {
+      await FirebaseAuthService.instance.initialize();
+    }
+  } catch (error) {
+    debugPrint('Firebase initialization error: $error');
+  }
+
+  runApp(const PozyApp());
 }
