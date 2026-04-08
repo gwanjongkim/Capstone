@@ -90,10 +90,19 @@ class AcutJob {
   factory AcutJob.fromSnapshot(
     DocumentSnapshot<Map<String, dynamic>> snapshot,
   ) {
-    final data = snapshot.data() ?? const <String, dynamic>{};
+    return AcutJob.fromMap(
+      id: snapshot.id,
+      data: snapshot.data() ?? const <String, dynamic>{},
+    );
+  }
+
+  factory AcutJob.fromMap({
+    required String id,
+    required Map<String, dynamic> data,
+  }) {
     final error = _toStringDynamicMap(data['error']);
     return AcutJob(
-      id: snapshot.id,
+      id: id,
       status: _parseStatus(data['status'] as String?),
       createdAt: _toDateTime(data['createdAt']),
       updatedAt: _toDateTime(data['updatedAt']),

@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import '../firebase_bootstrap.dart';
 
@@ -27,6 +28,10 @@ class FirebaseAuthService {
       FirebaseBootstrap.throwIfUnavailable();
     }
 
+    debugPrint(
+      '[AUTH] currentUser(before)=${FirebaseAuth.instance.currentUser?.uid}',
+    );
+
     final existingUser = _auth.currentUser;
     if (existingUser != null) {
       _lastErrorMessage = null;
@@ -35,17 +40,24 @@ class FirebaseAuthService {
 
     try {
       final credential = await _auth.signInAnonymously();
+      debugPrint(
+        '[AUTH] signInAnonymously success uid=${credential.user?.uid}',
+      );
       final user = credential.user;
       if (user == null) {
         throw StateError('Firebase 익명 로그인 사용자 정보를 확인하지 못했어요.');
       }
       _lastErrorMessage = null;
       return user;
-    } on FirebaseAuthException catch (error) {
+    } on FirebaseAuthException catch (error, st) {
+      debugPrint('[AUTH][ERROR] signInAnonymously failed: $error');
+      debugPrint('$st');
       final message = _userFacingAuthError(error);
       _lastErrorMessage = message;
       throw StateError(message);
-    } catch (error) {
+    } catch (error, st) {
+      debugPrint('[AUTH][ERROR] signInAnonymously failed: $error');
+      debugPrint('$st');
       final message = error.toString().replaceFirst('Bad state: ', '');
       _lastErrorMessage = message;
       throw StateError(message);

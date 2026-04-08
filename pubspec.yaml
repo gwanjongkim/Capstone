@@ -34,25 +34,27 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  camera: ^0.11.0
+  camera: ^0.12.0+1
   image: ^4.2.0
   ultralytics_yolo:
     path: packages/ultralytics_yolo
-  image_picker: ^0.8.7
+  image_picker: ^1.2.1
   gal: ^2.3.2
   photo_manager: ^3.9.0
   permission_handler: any
-  sensors_plus: ^4.0.2
+  sensors_plus: ^7.0.0
   flutter_litert: ^2.0.7
   flutter_litert_flex: ^0.0.5
   google_generative_ai: ^0.4.6
   http: ^1.2.0
-  flutter_dotenv: ^5.2.1
-  firebase_core: ^3.13.1
-  firebase_auth: ^5.5.4
-  cloud_firestore: ^5.6.8
-  firebase_storage: ^12.4.6
-  cloud_functions: ^5.5.1
+  flutter_dotenv: ^6.0.0
+  google_mlkit_face_detection: ^0.11.1
+  firebase_core: ^4.6.0
+  firebase_auth: ^6.3.0
+  cloud_firestore: ^6.2.0
+  firebase_storage: ^13.2.0
+  cloud_functions: ^6.1.0
+  firebase_app_check: ^0.4.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

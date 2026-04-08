@@ -1,14 +1,12 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:gal/gal.dart';
 import 'package:image_picker/image_picker.dart';
 
-
-import '../service/gemini_service.dart';
+import 'package:pose_camera_app/services/gemini_service.dart';
 import 'crop_screen.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -464,10 +462,11 @@ class _EditorScreenState extends State<EditorScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('사진 저장에 실패했습니다: $error')));
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isSaving = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
 
@@ -659,7 +658,7 @@ class _EditorScreenState extends State<EditorScreen> {
                   ),
                 if (_isPreparingImage || _isRenderingPreview || _isSaving)
                   Container(
-                    color: Colors.black.withOpacity(0.22),
+                    color: Colors.black.withValues(alpha: 0.22),
                     child: Center(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -667,7 +666,7 @@ class _EditorScreenState extends State<EditorScreen> {
                           vertical: 14,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.62),
+                          color: Colors.black.withValues(alpha: 0.62),
                           borderRadius: BorderRadius.circular(18),
                         ),
                         child: Column(
@@ -994,7 +993,7 @@ class _EditorScreenState extends State<EditorScreen> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: EditorAdjustment.values.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
           final adjustment = EditorAdjustment.values[index];
           final selected = adjustment == _activeAdjustment;
@@ -1271,4 +1270,3 @@ class _AiEditSheetState extends State<_AiEditSheet> {
     );
   }
 }
-
