@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
 import 'package:photo_manager/photo_manager.dart';
 
 import '../firebase_bootstrap.dart';
@@ -32,6 +33,8 @@ class AcutFirebaseService {
   final FirebaseStorage _storage;
   final FirebaseFunctions _functions;
   final FirebaseAuthService _authService;
+
+  static const int _normalizedJpegQuality = 95;
 
   Future<AcutJob> submitAnalysisJob({
     required List<AssetEntity> assets,
@@ -95,9 +98,7 @@ class AcutFirebaseService {
       };
       debugPrint('[ACUT] enqueue request payload=$enqueuePayload');
       final callableUser = FirebaseAuth.instance.currentUser;
-      debugPrint(
-        '[AUTH] currentUser(before callable)=${callableUser?.uid}',
-      );
+      debugPrint('[AUTH] currentUser(before callable)=${callableUser?.uid}');
       if (callableUser == null) {
         throw Exception('Anonymous auth not ready before enqueue');
       }
@@ -141,17 +142,15 @@ class AcutFirebaseService {
         fallbackTopK: topK,
         fallbackInputFiles: inputFiles,
         fallbackInputStoragePrefix:
-            _readString(responseData['inputStoragePrefix']) ?? inputStoragePrefix,
+            _readString(responseData['inputStoragePrefix']) ??
+            inputStoragePrefix,
         fallbackOutputStoragePrefix:
             _readString(responseData['outputStoragePrefix']) ??
             outputStoragePrefix,
         fallbackEnableDiversity: enableDiversity,
       );
 
-      return AcutJob.fromMap(
-        id: jobId,
-        data: initialJobData,
-      );
+      return AcutJob.fromMap(id: jobId, data: initialJobData);
     });
   }
 
@@ -231,38 +230,49 @@ class AcutFirebaseService {
     required String inputStoragePrefix,
     required String ownerUid,
   }) async {
-    final bytes = await asset.originBytes;
-    if (bytes == null || bytes.isEmpty) {
-      throw StateError('선택한 이미지 원본을 읽지 못했어요.');
-    }
+    final payload = await _prepareUploadPayload(asset);
 
     final title = await asset.titleAsync;
-    final fileName = _buildUploadFileName(
+    final baseName = _buildUploadBaseName(
       selectedIndex: selectedIndex,
       originalTitle: title,
       fallbackId: asset.id,
     );
+    final fileName = '$baseName.${payload.extension}';
     final storagePath = '$inputStoragePrefix/$fileName';
+    final displayName = title.trim().isEmpty ? fileName : title;
+
+    debugPrint(
+      '[AcutFirebaseService] Uploading A-cut asset '
+      'assetId=${asset.id} selectedIndex=$selectedIndex '
+      'sourceFormat=${payload.sourceFormat} uploadFormat=${payload.uploadFormat} '
+      'normalizedToJpeg=${payload.normalizedToJpeg} fileName=$fileName '
+      'byteLength=${payload.bytes.length}',
+    );
 
     await _storage
         .ref(storagePath)
         .putData(
-          bytes,
+          payload.bytes,
           SettableMetadata(
-            contentType: _contentTypeForFileName(fileName),
+            contentType: payload.contentType,
             customMetadata: {
               'selectedIndex': '$selectedIndex',
               'assetId': asset.id,
-              'displayName': title,
+              'displayName': displayName,
               'ownerUid': ownerUid,
               'jobId': jobId,
+              'sourceFormat': payload.sourceFormat,
+              'uploadedFormat': payload.uploadFormat,
+              'normalizedToJpeg': payload.normalizedToJpeg ? 'true' : 'false',
+              'uploadedContentType': payload.contentType,
             },
           ),
         );
 
     return AcutInputFile(
       uploadFileName: fileName,
-      displayName: title.trim().isEmpty ? fileName : title,
+      displayName: displayName,
       storagePath: storagePath,
       selectedIndex: selectedIndex,
     );
@@ -354,7 +364,7 @@ class AcutFirebaseService {
     };
   }
 
-  String _buildUploadFileName({
+  String _buildUploadBaseName({
     required int selectedIndex,
     required String originalTitle,
     required String fallbackId,
@@ -362,28 +372,157 @@ class AcutFirebaseService {
     final trimmed = originalTitle.trim();
     final rawName = trimmed.isEmpty ? fallbackId : trimmed;
     final sanitized = rawName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-    final extension = sanitized.contains('.')
-        ? sanitized.substring(sanitized.lastIndexOf('.'))
-        : '.jpg';
     final baseName = sanitized.contains('.')
         ? sanitized.substring(0, sanitized.lastIndexOf('.'))
         : sanitized;
     final prefix = selectedIndex.toString().padLeft(3, '0');
-    return '${prefix}_${baseName.isEmpty ? 'photo' : baseName}$extension';
+    return '${prefix}_${baseName.isEmpty ? 'photo' : baseName}';
   }
 
-  String _contentTypeForFileName(String fileName) {
-    final lower = fileName.toLowerCase();
-    if (lower.endsWith('.png')) {
-      return 'image/png';
+  Future<_PreparedUploadPayload> _prepareUploadPayload(
+    AssetEntity asset,
+  ) async {
+    Uint8List? bytes = await asset.originBytes;
+    if (bytes == null || bytes.isEmpty) {
+      final originFile = await asset.originFile;
+      if (originFile != null && await originFile.exists()) {
+        bytes = await originFile.readAsBytes();
+      }
     }
-    if (lower.endsWith('.webp')) {
-      return 'image/webp';
+    if (bytes == null || bytes.isEmpty) {
+      throw StateError('선택한 이미지 원본을 읽지 못했어요. (assetId=${asset.id})');
     }
-    if (lower.endsWith('.heic') || lower.endsWith('.heif')) {
-      return 'image/heic';
+
+    final sourceFormat = _detectImageFormat(bytes);
+    if (sourceFormat == _UploadImageFormat.unknown) {
+      throw StateError(
+        '지원되지 않는 이미지 포맷이에요. '
+        '(assetId=${asset.id}, headerHex=${_headerHexPreview(bytes)})',
+      );
     }
-    return 'image/jpeg';
+
+    if (sourceFormat == _UploadImageFormat.jpeg) {
+      return _PreparedUploadPayload(
+        bytes: bytes,
+        extension: 'jpg',
+        contentType: 'image/jpeg',
+        sourceFormat: _formatLabel(sourceFormat),
+        uploadFormat: 'jpeg',
+        normalizedToJpeg: false,
+      );
+    }
+
+    if (sourceFormat == _UploadImageFormat.heic ||
+        sourceFormat == _UploadImageFormat.heif) {
+      return _PreparedUploadPayload(
+        bytes: bytes,
+        extension: sourceFormat == _UploadImageFormat.heif ? 'heif' : 'heic',
+        contentType: sourceFormat == _UploadImageFormat.heif
+            ? 'image/heif'
+            : 'image/heic',
+        sourceFormat: _formatLabel(sourceFormat),
+        uploadFormat: _formatLabel(sourceFormat),
+        normalizedToJpeg: false,
+      );
+    }
+
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) {
+      throw StateError(
+        '이미지를 디코딩하지 못했어요. '
+        '(assetId=${asset.id}, sourceFormat=${_formatLabel(sourceFormat)}, headerHex=${_headerHexPreview(bytes)})',
+      );
+    }
+    final normalized = Uint8List.fromList(
+      img.encodeJpg(decoded, quality: _normalizedJpegQuality),
+    );
+    if (normalized.isEmpty) {
+      throw StateError('JPEG 변환 결과가 비어 있어 업로드를 중단했어요. (assetId=${asset.id})');
+    }
+    return _PreparedUploadPayload(
+      bytes: normalized,
+      extension: 'jpg',
+      contentType: 'image/jpeg',
+      sourceFormat: _formatLabel(sourceFormat),
+      uploadFormat: 'jpeg',
+      normalizedToJpeg: true,
+    );
+  }
+
+  _UploadImageFormat _detectImageFormat(Uint8List bytes) {
+    if (bytes.length >= 12 &&
+        bytes[4] == 0x66 &&
+        bytes[5] == 0x74 &&
+        bytes[6] == 0x79 &&
+        bytes[7] == 0x70) {
+      final brand = String.fromCharCodes(bytes.sublist(8, 12)).toLowerCase();
+      if (brand.startsWith('he') || brand == 'mif1' || brand == 'msf1') {
+        if (brand == 'heif') {
+          return _UploadImageFormat.heif;
+        }
+        return _UploadImageFormat.heic;
+      }
+    }
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
+      return _UploadImageFormat.jpeg;
+    }
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47 &&
+        bytes[4] == 0x0D &&
+        bytes[5] == 0x0A &&
+        bytes[6] == 0x1A &&
+        bytes[7] == 0x0A) {
+      return _UploadImageFormat.png;
+    }
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return _UploadImageFormat.webp;
+    }
+    if (bytes.length >= 2 && bytes[0] == 0x42 && bytes[1] == 0x4D) {
+      return _UploadImageFormat.bmp;
+    }
+    return _UploadImageFormat.unknown;
+  }
+
+  String _formatLabel(_UploadImageFormat format) {
+    switch (format) {
+      case _UploadImageFormat.jpeg:
+        return 'jpeg';
+      case _UploadImageFormat.png:
+        return 'png';
+      case _UploadImageFormat.webp:
+        return 'webp';
+      case _UploadImageFormat.bmp:
+        return 'bmp';
+      case _UploadImageFormat.heic:
+        return 'heic';
+      case _UploadImageFormat.heif:
+        return 'heif';
+      case _UploadImageFormat.unknown:
+        return 'unknown';
+    }
+  }
+
+  String _headerHexPreview(Uint8List bytes, {int maxBytes = 24}) {
+    final end = bytes.length < maxBytes ? bytes.length : maxBytes;
+    final sb = StringBuffer();
+    for (var i = 0; i < end; i++) {
+      sb.write(bytes[i].toRadixString(16).padLeft(2, '0'));
+    }
+    return sb.toString();
   }
 
   String _userFacingFunctionsError(FirebaseFunctionsException error) {
@@ -454,4 +593,24 @@ class AcutFirebaseService {
     }
     return null;
   }
+}
+
+enum _UploadImageFormat { unknown, jpeg, png, webp, bmp, heic, heif }
+
+class _PreparedUploadPayload {
+  const _PreparedUploadPayload({
+    required this.bytes,
+    required this.extension,
+    required this.contentType,
+    required this.sourceFormat,
+    required this.uploadFormat,
+    required this.normalizedToJpeg,
+  });
+
+  final Uint8List bytes;
+  final String extension;
+  final String contentType;
+  final String sourceFormat;
+  final String uploadFormat;
+  final bool normalizedToJpeg;
 }
