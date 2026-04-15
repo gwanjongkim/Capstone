@@ -34,14 +34,12 @@ class AcutResultDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final scores = explanationRequest?.scores;
     final provenance = explanationRequest?.provenance;
-    final finalScore =
-        scores?.finalScore ?? item.finalScoreAfterRerank ?? item.baseScore;
+    final finalScore = scores?.finalScore ?? item.finalScore ?? item.baseScore;
     final technicalScore = scores?.technicalScore ?? item.technicalScore;
     final aestheticScore = scores?.aestheticScore ?? item.aestheticScore;
-    final compositionTags =
-        explanationRequest?.compositionTags.isNotEmpty == true
+    final tags = explanationRequest?.compositionTags.isNotEmpty == true
         ? explanationRequest!.compositionTags
-        : item.compositionTags;
+        : item.tags;
     final resolvedPhotoTypeMode =
         explanationRequest?.photoTypeMode ??
         item.photoTypeMode ??
@@ -70,7 +68,11 @@ class AcutResultDetailScreen extends StatelessWidget {
                       fallbackLabel: item.imageFileName,
                     ),
                     const SizedBox(height: 16),
-                    _HeaderCard(item: item, finalScore: finalScore),
+                    _HeaderCard(
+                      item: item,
+                      finalScore: finalScore,
+                      explanationSource: item.explanationSource,
+                    ),
                     const SizedBox(height: 12),
                     _ScoreGridCard(
                       finalScore: finalScore,
@@ -79,40 +81,37 @@ class AcutResultDetailScreen extends StatelessWidget {
                       baseScore: item.baseScore,
                       vilaScoreRaw: item.vilaScoreRaw,
                     ),
-                    if (compositionTags.isNotEmpty ||
+                    if (tags.isNotEmpty ||
                         (resolvedPhotoTypeMode ?? '').trim().isNotEmpty ||
                         item.aestheticModelsUsed.isNotEmpty ||
                         (provenance?.aestheticBackend ?? '')
                             .trim()
-                            .isNotEmpty) ...[
+                            .isNotEmpty ||
+                        (item.explanationSource ?? '').trim().isNotEmpty) ...[
                       const SizedBox(height: 12),
                       _TagCard(
-                        compositionTags: compositionTags,
+                        tags: tags,
                         photoTypeMode: resolvedPhotoTypeMode,
                         aestheticModels: item.aestheticModelsUsed,
                         aestheticBackend:
                             provenance?.aestheticBackend ??
                             item.aestheticBackend,
+                        explanationSource: item.explanationSource,
                       ),
                     ],
                     const SizedBox(height: 12),
                     _ReasonCard(
                       title: '짧은 이유',
-                      body: item.acutShortReason ?? '짧은 설명이 아직 없어요.',
+                      body: item.shortReason ?? '짧은 설명이 아직 없어요.',
                     ),
                     const SizedBox(height: 12),
                     _ReasonCard(
                       title: '상세 이유',
-                      body: item.acutDetailedReason ?? '상세 설명이 아직 없어요.',
+                      body: item.detailedReason ?? '상세 설명이 아직 없어요.',
                     ),
-                    if ((item.acutComparisonReason ?? '')
-                        .trim()
-                        .isNotEmpty) ...[
+                    if ((item.comparisonReason ?? '').trim().isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      _ReasonCard(
-                        title: '비교 이유',
-                        body: item.acutComparisonReason!,
-                      ),
+                      _ReasonCard(title: '비교 이유', body: item.comparisonReason!),
                     ],
                     const SizedBox(height: 12),
                     _MetadataCard(
@@ -195,8 +194,13 @@ class _ImagePlaceholder extends StatelessWidget {
 class _HeaderCard extends StatelessWidget {
   final AcutResultItem item;
   final double? finalScore;
+  final String? explanationSource;
 
-  const _HeaderCard({required this.item, required this.finalScore});
+  const _HeaderCard({
+    required this.item,
+    required this.finalScore,
+    required this.explanationSource,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -220,6 +224,10 @@ class _HeaderCard extends StatelessWidget {
               _InfoChip(
                 label: _formatScoreLabel(finalScore, fallback: item.scoreLabel),
               ),
+              if ((explanationSource ?? '').trim().isNotEmpty)
+                _InfoChip(
+                  label: _explanationSourceChipLabel(explanationSource!),
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -254,6 +262,16 @@ class _ScoreGridCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final metricRows = <Widget>[
+      if (baseScore != null)
+        _MetricRow(label: 'base_score', value: _formatRawScore(baseScore)),
+      if (vilaScoreRaw != null)
+        _MetricRow(
+          label: 'vila_score_raw',
+          value: _formatRawScore(vilaScoreRaw),
+        ),
+    ];
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -294,12 +312,10 @@ class _ScoreGridCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _MetricRow(label: 'base_score', value: _formatRawScore(baseScore)),
-          _MetricRow(
-            label: 'vila_score_raw',
-            value: _formatRawScore(vilaScoreRaw),
-          ),
+          if (metricRows.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...metricRows,
+          ],
         ],
       ),
     );
@@ -361,27 +377,31 @@ class _ScoreTile extends StatelessWidget {
 }
 
 class _TagCard extends StatelessWidget {
-  final List<String> compositionTags;
+  final List<String> tags;
   final String? photoTypeMode;
   final List<String> aestheticModels;
   final String? aestheticBackend;
+  final String? explanationSource;
 
   const _TagCard({
-    required this.compositionTags,
+    required this.tags,
     required this.photoTypeMode,
     required this.aestheticModels,
     required this.aestheticBackend,
+    required this.explanationSource,
   });
 
   @override
   Widget build(BuildContext context) {
     final chips = <String>[
       if ((photoTypeMode ?? '').trim().isNotEmpty)
-        'photoTypeMode: ${_photoTypeLabel(photoTypeMode!)}',
-      ...compositionTags.map((tag) => _compositionTagLabel(tag)),
-      ...aestheticModels.map((model) => 'model: $model'),
+        '모드 · ${_photoTypeLabel(photoTypeMode!)}',
+      ...tags.map((tag) => _compositionTagLabel(tag)),
+      ...aestheticModels.map((model) => '모델 · $model'),
       if ((aestheticBackend ?? '').trim().isNotEmpty)
-        'backend: ${aestheticBackend!.trim()}',
+        '점수 백엔드 · ${aestheticBackend!.trim()}',
+      if ((explanationSource ?? '').trim().isNotEmpty)
+        _explanationSourceChipLabel(explanationSource!),
     ];
 
     return Container(
@@ -395,7 +415,7 @@ class _TagCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('태그', style: AppTextStyles.title16),
+          Text('태그 및 출처', style: AppTextStyles.title16),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
@@ -450,15 +470,15 @@ class _MetadataCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final metaRows = <String>[
       if ((rankingStage ?? '').trim().isNotEmpty)
-        'stage: ${rankingStage!.trim()}',
+        '랭킹 단계 · ${rankingStage!.trim()}',
       if (generatedAt != null)
-        'generated: ${_formatDateTime(generatedAt!.toLocal())}',
+        '생성 시각 · ${_formatDateTime(generatedAt!.toLocal())}',
       if ((technicalSource ?? '').trim().isNotEmpty)
-        'technical_source: ${technicalSource!.trim()}',
+        '기술 점수 출처 · ${technicalSource!.trim()}',
       if ((aestheticSource ?? '').trim().isNotEmpty)
-        'aesthetic_source: ${aestheticSource!.trim()}',
+        '미적 점수 출처 · ${aestheticSource!.trim()}',
       if ((finalScoreSource ?? '').trim().isNotEmpty)
-        'final_score_source: ${finalScoreSource!.trim()}',
+        '최종 점수 출처 · ${finalScoreSource!.trim()}',
     ];
 
     return Container(
@@ -629,11 +649,14 @@ String _compositionTagLabel(String raw) {
   switch (raw.trim().toLowerCase()) {
     case 'composition':
       return '구도';
+    case 'clarity':
     case 'subject_clarity':
       return '피사체 선명도';
+    case 'background':
     case 'background_cleanliness':
       return '배경 정돈';
     case 'lighting':
+    case 'exposure':
       return '조명';
     case 'technical_quality':
       return '기술 완성도';
@@ -643,5 +666,26 @@ String _compositionTagLabel(String raw) {
       return '전체 인상';
     default:
       return raw;
+  }
+}
+
+String _explanationSourceChipLabel(String raw) {
+  final label = _explanationSourceLabel(raw);
+  return label == raw.trim() ? '설명 · ${raw.trim()}' : label;
+}
+
+String _explanationSourceLabel(String raw) {
+  switch (raw.trim().toLowerCase()) {
+    case 'gemini_multimodal':
+    case 'gemini':
+    case 'firebase_server':
+      return '설명 · Gemini';
+    case 'vila_full_local':
+    case 'nvila':
+      return '설명 · NVILA';
+    case 'baseline_acut':
+      return '설명 · 기본 랭킹';
+    default:
+      return raw.trim();
   }
 }

@@ -88,7 +88,8 @@ class _ACutResultScreenState extends State<ACutResultScreen> {
           generatedAt: result?.generatedAt,
           rankingStage: result?.rankingStage,
           scoreSemantics: result?.scoreSemantics,
-          photoTypeMode: _photoTypeMode.backendValue,
+          photoTypeMode:
+              result?.resolvedPhotoTypeMode ?? _photoTypeMode.backendValue,
           explanationRequest: explanationRequest,
         ),
       ),
@@ -389,6 +390,10 @@ class _SummaryHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sourceParts = <String>[result.displaySource];
+    final explanationSource = result.primaryExplanationSource;
+    final resolvedModeLabel = result.resolvedPhotoTypeMode == null
+        ? photoTypeMode.label
+        : _photoTypeLabel(result.resolvedPhotoTypeMode!);
     if (result.rankingStage.trim().isNotEmpty &&
         result.rankingStage.trim() != 'unknown') {
       sourceParts.add(result.rankingStage);
@@ -416,7 +421,7 @@ class _SummaryHeader extends StatelessWidget {
                   ),
                 ),
               ),
-              _ModeBadge(label: photoTypeMode.label),
+              _ModeBadge(label: resolvedModeLabel),
             ],
           ),
           const SizedBox(height: 6),
@@ -452,6 +457,10 @@ class _SummaryHeader extends StatelessWidget {
               ),
             ],
           ),
+          if ((explanationSource ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _MetaPill(label: _explanationSourceChipLabel(explanationSource!)),
+          ],
           const SizedBox(height: 12),
           Text(
             sourceParts.join(' · '),
@@ -521,6 +530,47 @@ class _BestShotHighlight extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scoreChips = <Widget>[
+      if (item.finalScoreChipLabel != null)
+        _HighlightPill(
+          label: item.finalScoreChipLabel!,
+          background: const Color(0xFF111827),
+          foreground: Colors.white,
+        ),
+      if (item.technicalScoreChipLabel != null)
+        _HighlightPill(
+          label: item.technicalScoreChipLabel!,
+          background: const Color(0xFFF8FAFC),
+          foreground: AppColors.primaryText,
+        ),
+      if (item.aestheticScoreChipLabel != null)
+        _HighlightPill(
+          label: item.aestheticScoreChipLabel!,
+          background: const Color(0xFFF8FAFC),
+          foreground: AppColors.primaryText,
+        ),
+      _HighlightPill(
+        label: item.selectedBadgeLabel,
+        background: const Color(0xFFFFF7CC),
+        foreground: const Color(0xFF92400E),
+      ),
+    ];
+    final contextChips = <Widget>[
+      if ((item.explanationSource ?? '').trim().isNotEmpty)
+        _HighlightPill(
+          label: _explanationSourceChipLabel(item.explanationSource!),
+          background: const Color(0xFFEFF6FF),
+          foreground: const Color(0xFF1D4ED8),
+        ),
+      ...item.previewTags.map(
+        (tag) => _HighlightPill(
+          label: _resultTagChipLabel(tag),
+          background: const Color(0xFFF8FAFC),
+          foreground: AppColors.primaryText,
+        ),
+      ),
+    ];
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -616,27 +666,11 @@ class _BestShotHighlight extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _HighlightPill(
-                        label: item.scoreLabel,
-                        background: const Color(0xFF111827),
-                        foreground: Colors.white,
-                      ),
-                      _HighlightPill(
-                        label: item.verdictLabel,
-                        background: const Color(0xFFF8FAFC),
-                        foreground: AppColors.primaryText,
-                      ),
-                      _HighlightPill(
-                        label: item.selectedBadgeLabel,
-                        background: const Color(0xFFFFF7CC),
-                        foreground: const Color(0xFF92400E),
-                      ),
-                    ],
-                  ),
+                  Wrap(spacing: 8, runSpacing: 8, children: scoreChips),
+                  if (contextChips.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, children: contextChips),
+                  ],
                 ],
               ),
             ),
@@ -762,6 +796,16 @@ class _ResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final thumbSize = compact ? 82.0 : 92.0;
+    final scoreChips = <String>[
+      if (item.finalScoreChipLabel != null) item.finalScoreChipLabel!,
+      if (item.technicalScoreChipLabel != null) item.technicalScoreChipLabel!,
+      if (item.aestheticScoreChipLabel != null) item.aestheticScoreChipLabel!,
+    ];
+    final contextChips = <String>[
+      if (!compact && (item.explanationSource ?? '').trim().isNotEmpty)
+        _explanationSourceChipLabel(item.explanationSource!),
+      if (!compact) ...item.previewTags.map(_resultTagChipLabel),
+    ];
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -866,12 +910,20 @@ class _ResultCard extends StatelessWidget {
                   runSpacing: 6,
                   children: [
                     _MetaPill(label: item.rankLabel),
-                    _MetaPill(label: item.verdictLabel),
-                    if (item.selected && !item.isTopThree)
-                      const _MetaPill(label: 'A컷 후보'),
-                    _MetaPill(label: item.scoreLabel),
+                    _MetaPill(label: item.selectedBadgeLabel),
+                    ...scoreChips.map((label) => _MetaPill(label: label)),
                   ],
                 ),
+                if (contextChips.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: contextChips
+                        .map((label) => _MetaPill(label: label))
+                        .toList(growable: false),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1070,6 +1122,64 @@ class _ModeBadge extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+String _photoTypeLabel(String raw) {
+  switch (raw.trim().toLowerCase()) {
+    case 'portrait':
+      return '인물';
+    case 'snap':
+      return '스냅';
+    case 'auto':
+      return '자동';
+    default:
+      return raw.trim();
+  }
+}
+
+String _resultTagChipLabel(String raw) {
+  switch (raw.trim().toLowerCase()) {
+    case 'composition':
+      return '구도';
+    case 'subject_clarity':
+    case 'clarity':
+      return '선명도';
+    case 'background_cleanliness':
+    case 'background':
+      return '배경';
+    case 'lighting':
+    case 'exposure':
+      return '조명';
+    case 'technical_quality':
+      return '기술';
+    case 'aesthetic_score':
+      return '미적';
+    case 'overall_image_appeal':
+      return '전체 인상';
+    default:
+      return raw.trim();
+  }
+}
+
+String _explanationSourceChipLabel(String raw) {
+  final label = _explanationSourceLabel(raw);
+  return label == raw.trim() ? '설명 ${raw.trim()}' : label;
+}
+
+String _explanationSourceLabel(String raw) {
+  switch (raw.trim().toLowerCase()) {
+    case 'gemini_multimodal':
+    case 'gemini':
+    case 'firebase_server':
+      return 'Gemini 설명';
+    case 'vila_full_local':
+    case 'nvila':
+      return 'NVILA 설명';
+    case 'baseline_acut':
+      return '기본 설명';
+    default:
+      return raw.trim();
   }
 }
 

@@ -12,15 +12,16 @@ class AcutResultItem {
   final bool aestheticScoreContributed;
   final List<String> aestheticModelsUsed;
   final String? aestheticBackend;
-  final double? finalScoreAfterRerank;
+  final double? finalScore;
   final double? vilaScoreRaw;
   final double? vilaScoreNormalizedInPool;
   final String? photoTypeMode;
-  final List<String> compositionTags;
+  final List<String> tags;
   final Map<String, dynamic>? explanationStructured;
-  final String? acutShortReason;
-  final String? acutDetailedReason;
-  final String? acutComparisonReason;
+  final String? shortReason;
+  final String? detailedReason;
+  final String? comparisonReason;
+  final String? explanationSource;
 
   const AcutResultItem({
     required this.rank,
@@ -34,56 +35,178 @@ class AcutResultItem {
     required this.aestheticScoreContributed,
     required this.aestheticModelsUsed,
     required this.aestheticBackend,
-    required this.finalScoreAfterRerank,
+    required this.finalScore,
     required this.vilaScoreRaw,
     required this.vilaScoreNormalizedInPool,
     required this.photoTypeMode,
-    required this.compositionTags,
+    required this.tags,
     required this.explanationStructured,
-    required this.acutShortReason,
-    required this.acutDetailedReason,
-    required this.acutComparisonReason,
+    required this.shortReason,
+    required this.detailedReason,
+    required this.comparisonReason,
+    required this.explanationSource,
   });
 
-  factory AcutResultItem.fromJson(Map<String, dynamic> json) {
+  /// Primary normalization layer for Firebase `app_results.json` rows.
+  ///
+  /// Accepts current snake_case export fields, camelCase variants, older
+  /// `acut_*` explanation keys, and richer nested explanation payloads.
+  factory AcutResultItem.fromJson(
+    Map<String, dynamic> json, {
+    String? fallbackPhotoTypeMode,
+    String? fallbackExplanationSource,
+  }) {
+    final imageContext = _toMap(json['image']) ?? _toMap(json['image_context']);
+    final scorePayload = _toMap(json['scores']) ?? _toMap(json['score']);
+    final activeExplanation = _resolveActiveExplanation(json);
+    final activeReasons =
+        _toMap(activeExplanation?['reasons']) ??
+        _toMap(activeExplanation?['reason_context']);
     final explanationStructured =
         _toMap(json['explanation_structured']) ??
-        _toMap(json['acut_explanation_structured']);
-    final compositionTags = _extractCompositionTags(
+        _toMap(json['explanationStructured']) ??
+        _toMap(json['acut_explanation_structured']) ??
+        _toMap(activeExplanation?['explanation_structured']) ??
+        _toMap(activeExplanation?['explanationStructured']);
+    final normalizedStatus = _readSelectionStatus(json);
+    final selected =
+        _toBoolOrNull(json['selected']) ??
+        _toBoolOrNull(json['is_selected']) ??
+        _toBoolOrNull(json['isSelected']) ??
+        (normalizedStatus == 'selected'
+            ? true
+            : normalizedStatus == 'rejected'
+            ? false
+            : null) ??
+        false;
+    final aestheticModelsUsed = _preferredStringList(
+      json['aesthetic_models_used'],
+      json['aestheticModelsUsed'],
+    );
+    final tags = _extractTags(
       json,
       explanationStructured: explanationStructured,
+      activeExplanation: activeExplanation,
     );
+
     return AcutResultItem(
-      rank: (json['rank'] as num?)?.toInt() ?? 0,
-      imagePath: json['image_path'] as String? ?? '',
-      imageFileNameValue: json['image_file_name'] as String?,
-      selected: json['selected'] as bool? ?? false,
-      status: json['status'] as String? ?? 'rejected',
-      baseScore: _toDouble(json['base_score']),
+      rank:
+          _toInt(json['rank']) ??
+          _toInt(json['position']) ??
+          _toInt(json['order']) ??
+          0,
+      imagePath:
+          _firstText([
+            json['image_path'],
+            json['imagePath'],
+            imageContext?['image_path'],
+            imageContext?['imagePath'],
+            imageContext?['path'],
+            json['path'],
+          ]) ??
+          '',
+      imageFileNameValue: _firstText([
+        json['image_file_name'],
+        json['imageFileName'],
+        imageContext?['image_file_name'],
+        imageContext?['imageFileName'],
+        imageContext?['file_name'],
+        imageContext?['fileName'],
+      ]),
+      selected: selected,
+      status: normalizedStatus ?? (selected ? 'selected' : 'rejected'),
+      baseScore:
+          _toDouble(json['base_score']) ??
+          _toDouble(json['baseScore']) ??
+          _toDouble(scorePayload?['base_score']) ??
+          _toDouble(scorePayload?['baseScore']),
       technicalScore:
           _toDouble(json['technical_score']) ??
-          _toDouble(json['technical_component']),
+          _toDouble(json['technicalScore']) ??
+          _toDouble(json['technical_component']) ??
+          _toDouble(json['technicalComponent']) ??
+          _toDouble(scorePayload?['technical_score']) ??
+          _toDouble(scorePayload?['technicalScore']),
       aestheticScore:
           _toDouble(json['aesthetic_score']) ??
-          _toDouble(json['aesthetic_component']),
+          _toDouble(json['aestheticScore']) ??
+          _toDouble(json['aesthetic_component']) ??
+          _toDouble(json['aestheticComponent']) ??
+          _toDouble(scorePayload?['aesthetic_score']) ??
+          _toDouble(scorePayload?['aestheticScore']),
       aestheticScoreContributed:
-          json['aesthetic_score_contributed'] as bool? ??
-          _toDouble(json['aesthetic_score']) != null,
-      aestheticModelsUsed: _toStringList(json['aesthetic_models_used']),
-      aestheticBackend: _cleanText(json['aesthetic_backend']),
-      finalScoreAfterRerank: _toDouble(json['final_score_after_rerank']),
-      vilaScoreRaw: _toDouble(json['vila_score_raw']),
-      vilaScoreNormalizedInPool: _toDouble(
-        json['vila_score_normalized_in_pool'],
-      ),
-      photoTypeMode:
-          _cleanText(json['photoTypeMode']) ??
-          _cleanText(json['photo_type_mode']),
-      compositionTags: compositionTags,
+          _toBoolOrNull(json['aesthetic_score_contributed']) ??
+          _toBoolOrNull(json['aestheticScoreContributed']) ??
+          (_toDouble(json['aesthetic_score']) != null ||
+              _toDouble(json['aestheticScore']) != null ||
+              _toDouble(scorePayload?['aesthetic_score']) != null ||
+              _toDouble(scorePayload?['aestheticScore']) != null),
+      aestheticModelsUsed: aestheticModelsUsed,
+      aestheticBackend:
+          _cleanText(json['aesthetic_backend']) ??
+          _cleanText(json['aestheticBackend']),
+      finalScore:
+          _toDouble(json['final_score']) ??
+          _toDouble(json['finalScore']) ??
+          _toDouble(json['final_score_after_rerank']) ??
+          _toDouble(json['finalScoreAfterRerank']) ??
+          _toDouble(scorePayload?['final_score']) ??
+          _toDouble(scorePayload?['finalScore']),
+      vilaScoreRaw:
+          _toDouble(json['vila_score_raw']) ??
+          _toDouble(json['vilaScoreRaw']) ??
+          _toDouble(scorePayload?['vila_score_raw']) ??
+          _toDouble(scorePayload?['vilaScoreRaw']),
+      vilaScoreNormalizedInPool:
+          _toDouble(json['vila_score_normalized_in_pool']) ??
+          _toDouble(json['vilaScoreNormalizedInPool']) ??
+          _toDouble(scorePayload?['vila_score_normalized_in_pool']) ??
+          _toDouble(scorePayload?['vilaScoreNormalizedInPool']),
+      photoTypeMode: _firstText([
+        json['photoTypeMode'],
+        json['photo_type_mode'],
+        json['photo_type'],
+        json['photoType'],
+        fallbackPhotoTypeMode,
+      ]),
+      tags: tags,
       explanationStructured: explanationStructured,
-      acutShortReason: json['acut_short_reason'] as String?,
-      acutDetailedReason: json['acut_detailed_reason'] as String?,
-      acutComparisonReason: json['acut_comparison_reason'] as String?,
+      shortReason: _firstText([
+        json['short_reason'],
+        json['shortReason'],
+        json['acut_short_reason'],
+        activeExplanation?['short_reason'],
+        activeExplanation?['shortReason'],
+        activeReasons?['short_reason'],
+        activeReasons?['shortReason'],
+      ]),
+      detailedReason: _firstText([
+        json['detailed_reason'],
+        json['detailedReason'],
+        json['acut_detailed_reason'],
+        activeExplanation?['detailed_reason'],
+        activeExplanation?['detailedReason'],
+        activeReasons?['detailed_reason'],
+        activeReasons?['detailedReason'],
+      ]),
+      comparisonReason: _firstText([
+        json['comparison_reason'],
+        json['comparisonReason'],
+        json['acut_comparison_reason'],
+        activeExplanation?['comparison_reason'],
+        activeExplanation?['comparisonReason'],
+        activeReasons?['comparison_reason'],
+        activeReasons?['comparisonReason'],
+      ]),
+      explanationSource: _firstText([
+        json['active_explanation_source'],
+        json['activeExplanationSource'],
+        json['explanation_source'],
+        json['explanationSource'],
+        activeExplanation?['explanation_source'],
+        activeExplanation?['explanationSource'],
+        fallbackExplanationSource,
+      ]),
     );
   }
 
@@ -107,26 +230,36 @@ class AcutResultItem {
 
   String get rankLabel => rank > 0 ? '#$rank' : '-';
 
-  String get selectedBadgeLabel => selected ? '선택됨' : '후보 아님';
+  String get selectedBadgeLabel {
+    if (selected) {
+      return '선택됨';
+    }
+    final normalizedStatusLabel = statusLabel;
+    return normalizedStatusLabel == '제외' ? '후보 아님' : normalizedStatusLabel;
+  }
 
   String get primaryReason {
-    final shortReason = acutShortReason?.trim();
-    if (shortReason != null && shortReason.isNotEmpty) {
-      return shortReason;
+    final short = shortReason?.trim();
+    if (short != null && short.isNotEmpty) {
+      return short;
     }
-    final detailedReason = acutDetailedReason?.trim();
-    if (detailedReason != null && detailedReason.isNotEmpty) {
-      return detailedReason;
+    final detailed = detailedReason?.trim();
+    if (detailed != null && detailed.isNotEmpty) {
+      return detailed;
     }
     return '분석 이유가 아직 도착하지 않았어요.';
   }
 
-  double? get finalScore {
-    return finalScoreAfterRerank ?? baseScore;
+  bool get hasReasonDetails =>
+      (detailedReason ?? '').trim().isNotEmpty ||
+      (comparisonReason ?? '').trim().isNotEmpty;
+
+  double? get displayScore {
+    return finalScore ?? baseScore;
   }
 
   double? get normalizedDisplayScore {
-    final rawScore = finalScore ?? vilaScoreNormalizedInPool;
+    final rawScore = displayScore ?? vilaScoreNormalizedInPool;
     if (rawScore == null) {
       return null;
     }
@@ -151,6 +284,14 @@ class AcutResultItem {
     }
     return '종합 $pct점';
   }
+
+  String? get finalScoreChipLabel => _scoreChipLabel('최종', displayScore);
+
+  String? get technicalScoreChipLabel => _scoreChipLabel('기술', technicalScore);
+
+  String? get aestheticScoreChipLabel => _scoreChipLabel('미적', aestheticScore);
+
+  List<String> get previewTags => tags.take(2).toList(growable: false);
 
   String get verdictLabel {
     final normalized = normalizedDisplayScore;
@@ -177,6 +318,8 @@ class AcutResultItem {
         return '제외';
       case 'error':
         return '오류';
+      case 'candidate':
+        return '후보';
       default:
         return status.trim().isEmpty ? (selected ? '선택' : '후보') : status;
     }
@@ -205,6 +348,9 @@ class AcutResultItem {
     if (selected) {
       return 'A컷 후보';
     }
+    if (status.trim().toLowerCase() == 'error') {
+      return '결과 확인이 필요한 컷';
+    }
     return '후보에서 제외된 컷';
   }
 
@@ -218,12 +364,87 @@ class AcutResultItem {
     return double.tryParse(value.toString());
   }
 
+  static int? _toInt(Object? value) {
+    if (value is num) {
+      return value.toInt();
+    }
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  static bool? _toBoolOrNull(Object? value) {
+    if (value is bool) {
+      return value;
+    }
+    final text = _cleanText(value)?.toLowerCase();
+    if (text == 'true') {
+      return true;
+    }
+    if (text == 'false') {
+      return false;
+    }
+    return null;
+  }
+
   static String? _cleanText(Object? value) {
     if (value == null) {
       return null;
     }
     final text = value.toString().trim();
     return text.isEmpty ? null : text;
+  }
+
+  static String? _firstText(Iterable<Object?> candidates) {
+    for (final candidate in candidates) {
+      final text = _cleanText(candidate);
+      if (text != null) {
+        return text;
+      }
+    }
+    return null;
+  }
+
+  static String? _readSelectionStatus(Map<String, dynamic> json) {
+    final raw = _firstText([
+      json['selection_status'],
+      json['selectionStatus'],
+      json['status'],
+    ])?.toLowerCase();
+    switch (raw) {
+      case 'selected':
+      case 'rejected':
+      case 'error':
+      case 'candidate':
+        return raw;
+      default:
+        return null;
+    }
+  }
+
+  static Map<String, dynamic>? _resolveActiveExplanation(
+    Map<String, dynamic> json,
+  ) {
+    final direct =
+        _toMap(json['active_explanation']) ?? _toMap(json['activeExplanation']);
+    if (direct != null) {
+      return direct;
+    }
+    final explanations = _toMap(json['explanations']);
+    if (explanations == null || explanations.isEmpty) {
+      return null;
+    }
+    final activeSource =
+        _cleanText(json['active_explanation_source']) ??
+        _cleanText(json['activeExplanationSource']);
+    if (activeSource != null) {
+      final sourced = _toMap(explanations[activeSource]);
+      if (sourced != null) {
+        return sourced;
+      }
+    }
+    if (explanations.length == 1) {
+      return _toMap(explanations.values.first);
+    }
+    return null;
   }
 
   static Map<String, dynamic>? _toMap(Object? value) {
@@ -253,16 +474,23 @@ class AcutResultItem {
     return null;
   }
 
+  static List<String> _preferredStringList(Object? primary, Object? secondary) {
+    final primaryList = _toStringList(primary);
+    if (primaryList.isNotEmpty) {
+      return primaryList;
+    }
+    return _toStringList(secondary);
+  }
+
   static List<String> _toStringList(Object? value) {
     if (value == null) {
       return const [];
     }
     if (value is List) {
-      final values = value
+      return value
           .map((entry) => entry.toString().trim())
           .where((entry) => entry.isNotEmpty)
           .toList(growable: false);
-      return values;
     }
     if (value is String) {
       final trimmed = value.trim();
@@ -287,11 +515,13 @@ class AcutResultItem {
     return const [];
   }
 
-  static List<String> _extractCompositionTags(
+  static List<String> _extractTags(
     Map<String, dynamic> json, {
     required Map<String, dynamic>? explanationStructured,
+    required Map<String, dynamic>? activeExplanation,
   }) {
     final tags = <String>{};
+
     void addTagCandidates(Object? source) {
       for (final tag in _toStringList(source)) {
         final normalized = tag.trim();
@@ -301,13 +531,17 @@ class AcutResultItem {
       }
     }
 
+    addTagCandidates(json['tags']);
     addTagCandidates(json['composition_tags']);
     addTagCandidates(json['compositionTags']);
     addTagCandidates(json['composition_tag']);
     addTagCandidates(json['compositionTag']);
+    addTagCandidates(activeExplanation?['tags']);
+    addTagCandidates(activeExplanation?['composition_tags']);
 
     final structured = explanationStructured;
     if (structured != null) {
+      addTagCandidates(structured['tags']);
       addTagCandidates(structured['composition_tags']);
       final signals = _toMap(structured['signals']);
       if (signals != null) {
@@ -325,8 +559,14 @@ class AcutResultItem {
 
     if (tags.isEmpty) {
       final reasonText = [
+        _cleanText(json['short_reason']) ?? '',
+        _cleanText(json['shortReason']) ?? '',
+        _cleanText(json['detailed_reason']) ?? '',
+        _cleanText(json['detailedReason']) ?? '',
         _cleanText(json['acut_short_reason']) ?? '',
         _cleanText(json['acut_detailed_reason']) ?? '',
+        _cleanText(activeExplanation?['short_reason']) ?? '',
+        _cleanText(activeExplanation?['detailed_reason']) ?? '',
       ].join(' ').toLowerCase();
       final fallbackMap = <String, String>{
         'composition': 'composition',
@@ -345,5 +585,21 @@ class AcutResultItem {
     }
 
     return tags.take(10).toList(growable: false);
+  }
+
+  static String? _scoreChipLabel(String label, double? score) {
+    final normalized = _normalizeScore(score);
+    if (normalized == null) {
+      return null;
+    }
+    return '$label ${(normalized * 100).round()}점';
+  }
+
+  static double? _normalizeScore(double? score) {
+    if (score == null) {
+      return null;
+    }
+    final normalized = score > 1.0 && score <= 100.0 ? score / 100.0 : score;
+    return normalized.clamp(0.0, 1.0).toDouble();
   }
 }

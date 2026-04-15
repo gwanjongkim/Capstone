@@ -9,6 +9,10 @@ import 'scored_photo_result.dart';
 class ExplanationPayloadBuilder {
   static const String schemaVersion = 'acut_multimodal_explanation.v1';
 
+  /// Primary app-side normalization path for Firebase-delivered A-cut results.
+  ///
+  /// The UI should consume backend result payloads first and only use this
+  /// object as a stable display/debug envelope around those server results.
   static ExplanationRequest fromFirebaseResult({
     required AcutResult result,
     required AcutResultItem item,
@@ -21,9 +25,13 @@ class ExplanationPayloadBuilder {
     final pipelineConfig = result.pipelineConfig;
     final effectivePhotoTypeMode =
         _cleanText(item.photoTypeMode) ??
+        _cleanText(result.resolvedPhotoTypeMode) ??
         _cleanText(pipelineConfig['photoTypeMode']) ??
         _cleanText(pipelineConfig['photo_type_mode']) ??
         photoTypeMode.backendValue;
+    final effectiveExplanationSource =
+        _cleanText(item.explanationSource) ??
+        _cleanText(result.primaryExplanationSource);
     final aestheticEnabled =
         _toBool(pipelineConfig['aesthetic_enabled']) ||
         item.aestheticScore != null ||
@@ -41,6 +49,8 @@ class ExplanationPayloadBuilder {
         pipelineConfig['enable_vila_explanations'],
       ),
       'aesthetic_weight': _toDouble(pipelineConfig['aesthetic_weight']),
+      'result_schema_version': result.schemaVersion,
+      'result_explanation_source': effectiveExplanationSource,
     };
 
     return ExplanationRequest(
@@ -58,7 +68,7 @@ class ExplanationPayloadBuilder {
       scores: ExplanationScoreContext(
         technicalScore: item.technicalScore,
         aestheticScore: item.aestheticScore,
-        finalScore: item.finalScoreAfterRerank ?? item.baseScore,
+        finalScore: item.finalScore ?? item.baseScore,
         baseScore: item.baseScore,
         vilaScoreRaw: item.vilaScoreRaw,
         vilaScoreNormalizedInPool: item.vilaScoreNormalizedInPool,
@@ -66,7 +76,7 @@ class ExplanationPayloadBuilder {
       rank: item.rank > 0 ? item.rank : null,
       selected: item.selected,
       status: item.status,
-      compositionTags: item.compositionTags,
+      compositionTags: item.tags,
       photoTypeMode: effectivePhotoTypeMode,
       provenance: ExplanationScoreProvenance(
         technicalSource: 'server',
@@ -79,14 +89,18 @@ class ExplanationPayloadBuilder {
         vilaEnabled: vilaEnabled,
       ),
       reasons: ExplanationReasonContext(
-        shortReason: _cleanText(item.acutShortReason),
-        detailedReason: _cleanText(item.acutDetailedReason),
-        comparisonReason: _cleanText(item.acutComparisonReason),
+        shortReason: _cleanText(item.shortReason),
+        detailedReason: _cleanText(item.detailedReason),
+        comparisonReason: _cleanText(item.comparisonReason),
       ),
       metadata: metadata,
     );
   }
 
+  /// Transitional legacy path kept for older on-device evaluation flows.
+  ///
+  /// This remains useful for local scoring/debug screens, but the current
+  /// A-cut product flow is Firebase-result-driven rather than VLM-on-device.
   static ExplanationRequest fromOnDeviceResult({
     required ScoredPhotoResult result,
     String? localUri,
