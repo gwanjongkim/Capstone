@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 import '../feature/a_cut/a_cut_controller.dart';
+import '../feature/a_cut/model/explanation_payload_builder.dart';
 import '../feature/a_cut/model/photo_type_mode.dart';
 import '../models/acut_result.dart';
 import '../models/acut_result_item.dart';
@@ -70,14 +71,25 @@ class _ACutResultScreenState extends State<ACutResultScreen> {
 
   void _openDetail(AcutResultItem item) {
     final result = _controller.result;
+    final asset = _controller.assetForItem(item);
+    final explanationRequest = result == null
+        ? null
+        : ExplanationPayloadBuilder.fromFirebaseResult(
+            result: result,
+            item: item,
+            photoTypeMode: _photoTypeMode,
+            asset: asset,
+          );
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => AcutResultDetailScreen(
           item: item,
-          asset: _controller.assetForItem(item),
+          asset: asset,
           generatedAt: result?.generatedAt,
           rankingStage: result?.rankingStage,
           scoreSemantics: result?.scoreSemantics,
+          photoTypeMode: _photoTypeMode.backendValue,
+          explanationRequest: explanationRequest,
         ),
       ),
     );

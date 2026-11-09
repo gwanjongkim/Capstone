@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 
+import '../feature/a_cut/model/explanation_request.dart';
 import '../models/acut_result_item.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_shadows.dart';
@@ -15,6 +16,8 @@ class AcutResultDetailScreen extends StatelessWidget {
   final DateTime? generatedAt;
   final String? rankingStage;
   final String? scoreSemantics;
+  final String? photoTypeMode;
+  final ExplanationRequest? explanationRequest;
 
   const AcutResultDetailScreen({
     super.key,
@@ -23,10 +26,27 @@ class AcutResultDetailScreen extends StatelessWidget {
     this.generatedAt,
     this.rankingStage,
     this.scoreSemantics,
+    this.photoTypeMode,
+    this.explanationRequest,
   });
 
   @override
   Widget build(BuildContext context) {
+    final scores = explanationRequest?.scores;
+    final provenance = explanationRequest?.provenance;
+    final finalScore =
+        scores?.finalScore ?? item.finalScoreAfterRerank ?? item.baseScore;
+    final technicalScore = scores?.technicalScore ?? item.technicalScore;
+    final aestheticScore = scores?.aestheticScore ?? item.aestheticScore;
+    final compositionTags =
+        explanationRequest?.compositionTags.isNotEmpty == true
+        ? explanationRequest!.compositionTags
+        : item.compositionTags;
+    final resolvedPhotoTypeMode =
+        explanationRequest?.photoTypeMode ??
+        item.photoTypeMode ??
+        photoTypeMode;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
@@ -49,8 +69,32 @@ class AcutResultDetailScreen extends StatelessWidget {
                       asset: asset,
                       fallbackLabel: item.imageFileName,
                     ),
-                    const SizedBox(height: 18),
-                    _HeaderCard(item: item),
+                    const SizedBox(height: 16),
+                    _HeaderCard(item: item, finalScore: finalScore),
+                    const SizedBox(height: 12),
+                    _ScoreGridCard(
+                      finalScore: finalScore,
+                      technicalScore: technicalScore,
+                      aestheticScore: aestheticScore,
+                      baseScore: item.baseScore,
+                      vilaScoreRaw: item.vilaScoreRaw,
+                    ),
+                    if (compositionTags.isNotEmpty ||
+                        (resolvedPhotoTypeMode ?? '').trim().isNotEmpty ||
+                        item.aestheticModelsUsed.isNotEmpty ||
+                        (provenance?.aestheticBackend ?? '')
+                            .trim()
+                            .isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _TagCard(
+                        compositionTags: compositionTags,
+                        photoTypeMode: resolvedPhotoTypeMode,
+                        aestheticModels: item.aestheticModelsUsed,
+                        aestheticBackend:
+                            provenance?.aestheticBackend ??
+                            item.aestheticBackend,
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     _ReasonCard(
                       title: '짧은 이유',
@@ -71,20 +115,14 @@ class AcutResultDetailScreen extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 12),
-                    _ScoreCard(item: item),
-                    if ((scoreSemantics ?? '').trim().isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      _ReasonCard(
-                        title: '점수 해석',
-                        body: scoreSemantics!,
-                        icon: Icons.info_outline_rounded,
-                      ),
-                    ],
-                    if (generatedAt != null ||
-                        (rankingStage ?? '').trim().isNotEmpty) ...[
-                      const SizedBox(height: 18),
-                      Text(_buildFooterText(), style: AppTextStyles.caption12),
-                    ],
+                    _MetadataCard(
+                      rankingStage: rankingStage,
+                      generatedAt: generatedAt,
+                      scoreSemantics: scoreSemantics,
+                      technicalSource: provenance?.technicalSource,
+                      aestheticSource: provenance?.aestheticSource,
+                      finalScoreSource: provenance?.finalScoreSource,
+                    ),
                   ],
                 ),
               ),
@@ -93,17 +131,6 @@ class AcutResultDetailScreen extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _buildFooterText() {
-    final parts = <String>[];
-    if ((rankingStage ?? '').trim().isNotEmpty) {
-      parts.add('stage: $rankingStage');
-    }
-    if (generatedAt != null) {
-      parts.add('generated: ${generatedAt!.toLocal()}');
-    }
-    return parts.join(' | ');
   }
 }
 
@@ -167,8 +194,9 @@ class _ImagePlaceholder extends StatelessWidget {
 
 class _HeaderCard extends StatelessWidget {
   final AcutResultItem item;
+  final double? finalScore;
 
-  const _HeaderCard({required this.item});
+  const _HeaderCard({required this.item, required this.finalScore});
 
   @override
   Widget build(BuildContext context) {
@@ -189,11 +217,18 @@ class _HeaderCard extends StatelessWidget {
             children: [
               _InfoChip(label: item.rankLabel),
               _InfoChip(label: item.selectedBadgeLabel),
-              _InfoChip(label: item.scoreLabel),
+              _InfoChip(
+                label: _formatScoreLabel(finalScore, fallback: item.scoreLabel),
+              ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(item.imageFileName, style: AppTextStyles.caption12),
+          Text(
+            item.imageFileName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.caption12,
+          ),
           const SizedBox(height: 8),
           Text(item.primaryReason, style: AppTextStyles.title16),
         ],
@@ -202,10 +237,20 @@ class _HeaderCard extends StatelessWidget {
   }
 }
 
-class _ScoreCard extends StatelessWidget {
-  final AcutResultItem item;
+class _ScoreGridCard extends StatelessWidget {
+  final double? finalScore;
+  final double? technicalScore;
+  final double? aestheticScore;
+  final double? baseScore;
+  final double? vilaScoreRaw;
 
-  const _ScoreCard({required this.item});
+  const _ScoreGridCard({
+    required this.finalScore,
+    required this.technicalScore,
+    required this.aestheticScore,
+    required this.baseScore,
+    required this.vilaScoreRaw,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -220,31 +265,230 @@ class _ScoreCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('점수 정보', style: AppTextStyles.title16),
+          Text('점수', style: AppTextStyles.title16),
           const SizedBox(height: 12),
-          _MetricRow(label: 'base_score', value: _formatDouble(item.baseScore)),
-          _MetricRow(
-            label: 'final_score_after_rerank',
-            value: _formatDouble(item.finalScoreAfterRerank),
+          Row(
+            children: [
+              Expanded(
+                child: _ScoreTile(
+                  label: '기술',
+                  score: technicalScore,
+                  highlight: false,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ScoreTile(
+                  label: '미적',
+                  score: aestheticScore,
+                  highlight: false,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ScoreTile(
+                  label: '최종',
+                  score: finalScore,
+                  highlight: true,
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 12),
+          _MetricRow(label: 'base_score', value: _formatRawScore(baseScore)),
           _MetricRow(
             label: 'vila_score_raw',
-            value: _formatDouble(item.vilaScoreRaw),
-          ),
-          _MetricRow(
-            label: 'vila_score_normalized_in_pool',
-            value: _formatDouble(item.vilaScoreNormalizedInPool),
+            value: _formatRawScore(vilaScoreRaw),
           ),
         ],
       ),
     );
   }
+}
 
-  String _formatDouble(double? value) {
-    if (value == null) {
-      return '-';
-    }
-    return value.toStringAsFixed(3);
+class _ScoreTile extends StatelessWidget {
+  final String label;
+  final double? score;
+  final bool highlight;
+
+  const _ScoreTile({
+    required this.label,
+    required this.score,
+    required this.highlight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 9),
+      decoration: BoxDecoration(
+        color: highlight ? const Color(0xFF111827) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: highlight ? Colors.white70 : AppColors.secondaryText,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _formatPercentScore(score),
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+              color: highlight ? Colors.white : AppColors.primaryText,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            _formatRawScore(score),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: highlight ? Colors.white70 : AppColors.secondaryText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TagCard extends StatelessWidget {
+  final List<String> compositionTags;
+  final String? photoTypeMode;
+  final List<String> aestheticModels;
+  final String? aestheticBackend;
+
+  const _TagCard({
+    required this.compositionTags,
+    required this.photoTypeMode,
+    required this.aestheticModels,
+    required this.aestheticBackend,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final chips = <String>[
+      if ((photoTypeMode ?? '').trim().isNotEmpty)
+        'photoTypeMode: ${_photoTypeLabel(photoTypeMode!)}',
+      ...compositionTags.map((tag) => _compositionTagLabel(tag)),
+      ...aestheticModels.map((model) => 'model: $model'),
+      if ((aestheticBackend ?? '').trim().isNotEmpty)
+        'backend: ${aestheticBackend!.trim()}',
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: AppShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('태그', style: AppTextStyles.title16),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: chips
+                .map(
+                  (chip) => Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      chip,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryText,
+                      ),
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetadataCard extends StatelessWidget {
+  final String? rankingStage;
+  final DateTime? generatedAt;
+  final String? scoreSemantics;
+  final String? technicalSource;
+  final String? aestheticSource;
+  final String? finalScoreSource;
+
+  const _MetadataCard({
+    required this.rankingStage,
+    required this.generatedAt,
+    required this.scoreSemantics,
+    required this.technicalSource,
+    required this.aestheticSource,
+    required this.finalScoreSource,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final metaRows = <String>[
+      if ((rankingStage ?? '').trim().isNotEmpty)
+        'stage: ${rankingStage!.trim()}',
+      if (generatedAt != null)
+        'generated: ${_formatDateTime(generatedAt!.toLocal())}',
+      if ((technicalSource ?? '').trim().isNotEmpty)
+        'technical_source: ${technicalSource!.trim()}',
+      if ((aestheticSource ?? '').trim().isNotEmpty)
+        'aesthetic_source: ${aestheticSource!.trim()}',
+      if ((finalScoreSource ?? '').trim().isNotEmpty)
+        'final_score_source: ${finalScoreSource!.trim()}',
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: AppShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('메타데이터', style: AppTextStyles.title16),
+          if (metaRows.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ...metaRows.map(
+              (row) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(row, style: AppTextStyles.caption12),
+              ),
+            ),
+          ],
+          if ((scoreSemantics ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(scoreSemantics!.trim(), style: AppTextStyles.body13),
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -278,13 +522,8 @@ class _MetricRow extends StatelessWidget {
 class _ReasonCard extends StatelessWidget {
   final String title;
   final String body;
-  final IconData icon;
 
-  const _ReasonCard({
-    required this.title,
-    required this.body,
-    this.icon = Icons.auto_awesome_outlined,
-  });
+  const _ReasonCard({required this.title, required this.body});
 
   @override
   Widget build(BuildContext context) {
@@ -299,14 +538,8 @@ class _ReasonCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: AppColors.primaryText),
-              const SizedBox(width: 8),
-              Text(title, style: AppTextStyles.title16),
-            ],
-          ),
-          const SizedBox(height: 12),
+          Text(title, style: AppTextStyles.title16),
+          const SizedBox(height: 10),
           Text(body, style: AppTextStyles.body13),
         ],
       ),
@@ -336,5 +569,79 @@ class _InfoChip extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+String _formatDateTime(DateTime value) {
+  final y = value.year.toString().padLeft(4, '0');
+  final m = value.month.toString().padLeft(2, '0');
+  final d = value.day.toString().padLeft(2, '0');
+  final hh = value.hour.toString().padLeft(2, '0');
+  final mm = value.minute.toString().padLeft(2, '0');
+  return '$y-$m-$d $hh:$mm';
+}
+
+String _formatScoreLabel(double? score, {required String fallback}) {
+  final normalized = _normalizeScore(score);
+  if (normalized == null) {
+    return fallback;
+  }
+  return '종합 ${(normalized * 100).round()}점';
+}
+
+String _formatPercentScore(double? score) {
+  final normalized = _normalizeScore(score);
+  if (normalized == null) {
+    return '-';
+  }
+  return '${(normalized * 100).round()}점';
+}
+
+String _formatRawScore(double? score) {
+  if (score == null) {
+    return '-';
+  }
+  return score.toStringAsFixed(3);
+}
+
+double? _normalizeScore(double? score) {
+  if (score == null) {
+    return null;
+  }
+  final normalized = score > 1.0 && score <= 100.0 ? score / 100.0 : score;
+  return normalized.clamp(0.0, 1.0).toDouble();
+}
+
+String _photoTypeLabel(String raw) {
+  switch (raw.trim().toLowerCase()) {
+    case 'portrait':
+      return '인물';
+    case 'snap':
+      return '스냅';
+    case 'auto':
+      return '자동';
+    default:
+      return raw.trim();
+  }
+}
+
+String _compositionTagLabel(String raw) {
+  switch (raw.trim().toLowerCase()) {
+    case 'composition':
+      return '구도';
+    case 'subject_clarity':
+      return '피사체 선명도';
+    case 'background_cleanliness':
+      return '배경 정돈';
+    case 'lighting':
+      return '조명';
+    case 'technical_quality':
+      return '기술 완성도';
+    case 'aesthetic_score':
+      return '미적 점수';
+    case 'overall_image_appeal':
+      return '전체 인상';
+    default:
+      return raw;
   }
 }
